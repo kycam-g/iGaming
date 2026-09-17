@@ -86,6 +86,131 @@ final class WalletService
         return $this->move($userId, $accountType, $amountMinor, 'DEBIT', $referenceType, $referenceId, $idempotencyKey, $transactionType);
     }
 
+    public function accountBalanceMinor(string $userId, string $accountType = 'CASH'): int
+    {
+        $accountType = strtoupper(trim($accountType));
+        if (!in_array($accountType, self::ACCOUNT_TYPES, true)) throw new DomainException('Invalid wallet account type.');
+        $stmt = Database::connection()->prepare(
+            'SELECT wa.balance_minor FROM wallet_accounts wa JOIN wallets w ON w.id=wa.wallet_id '
+            . 'WHERE w.user_id=:user_id AND wa.type=:type LIMIT 1'
+        );
+        $stmt->execute(['user_id'=>$userId,'type'=>$accountType]);
+        $balance = $stmt->fetchColumn();
+        if ($balance === false) throw new DomainException('Wallet account not found.');
+        return (int)$balance;
+    }
+
+    /**
+     * Liquida uma rodada de cassino de forma atômica e idempotente no ledger.
+     * Um WinBet pode gerar uma entrada de débito e outra de crédito na mesma transação financeira.
+     */
+    public function settleCasino(
+        string $userId,
+        int $betMinor,
+        int $winMinor,
+        string $provider,
+        string $providerTransactionId,
+        string $gameCode,
+        string $eventType,
+    ): array {
+        $provider = strtoupper(trim($provider));
+        $providerTransactionId = trim($providerTransactionId);
+        $gameCode = trim($gameCode);
+        $eventType = strtoupper(trim($eventType));
+        if ($betMinor < 0 || $winMinor < 0) throw new DomainException('Invalid casino amounts.');
+        if ($provider === '' || strlen($provider) > 40 || $providerTransactionId === '' || strlen($providerTransactionId) > 160 || $gameCode === '' || strlen($gameCode) > 190) {
+            throw new DomainException('Invalid casino transaction reference.');
+        }
+        if (!in_array($eventType, ['BET','WIN','WINBET'], true)) throw new DomainException('Invalid casino event type.');
+
+        $idempotencyKey = strtolower($provider).':'.$providerTransactionId;
+        $scope = 'casino:'.strtolower($provider).':'.$userId;
+        $transactionType = 'CASINO_'.$eventType;
+
+        return Database::transaction(function (PDO $pdo) use ($userId,$betMinor,$winMinor,$provider,$providerTransactionId,$gameCode,$eventType,$idempotencyKey,$scope,$transactionType): array {
+            $idem = $pdo->prepare('INSERT IGNORE INTO idempotency_keys (`key`,scope) VALUES (:key,:scope)');
+            $idem->execute(['key'=>$idempotencyKey,'scope'=>$scope]);
+            if ($idem->rowCount() === 0) {
+                $stmt = $pdo->prepare(
+                    'SELECT wa.balance_minor,wa.currency FROM wallet_accounts wa JOIN wallets w ON w.id=wa.wallet_id '
+                    . "WHERE w.user_id=:user_id AND wa.type='CASH' LIMIT 1"
+                );
+                $stmt->execute(['user_id'=>$userId]);
+                $account = $stmt->fetch();
+                if (!$account) throw new DomainException('Wallet account not found.');
+                return ['balance_minor'=>(int)$account['balance_minor'],'currency'=>$account['currency'],'idempotent_replay'=>true];
+            }
+
+            $stmt = $pdo->prepare(
+                'SELECT wa.* FROM wallet_accounts wa JOIN wallets w ON w.id=wa.wallet_id '
+                . "WHERE w.user_id=:user_id AND wa.type='CASH' FOR UPDATE"
+            );
+            $stmt->execute(['user_id'=>$userId]);
+            $account = $stmt->fetch();
+            if (!$account) throw new DomainException('Wallet account not found.');
+
+            $before = (int)$account['balance_minor'];
+            if ($betMinor > $before) throw new DomainException('Insufficient balance.');
+            $afterBet = $before - $betMinor;
+            $after = $afterBet + $winMinor;
+
+            $transactionId = $this->uuid();
+            $correlationId = $this->uuid();
+            $metadata = json_encode([
+                'provider'=>$provider,
+                'provider_transaction_id'=>$providerTransactionId,
+                'game_code'=>$gameCode,
+                'event_type'=>$eventType,
+                'bet_minor'=>$betMinor,
+                'win_minor'=>$winMinor,
+            ], JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
+            $stmt = $pdo->prepare(
+                "INSERT INTO financial_transactions (id,user_id,type,status,reference_type,reference_id,correlation_id,metadata) "
+                . "VALUES (:id,:user_id,:type,'COMPLETED','PLAYFIVER',:reference_id,:correlation_id,:metadata)"
+            );
+            $stmt->execute([
+                'id'=>$transactionId,'user_id'=>$userId,'type'=>$transactionType,'reference_id'=>$providerTransactionId,
+                'correlation_id'=>$correlationId,'metadata'=>$metadata,
+            ]);
+
+            if ($betMinor > 0) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO ledger_entries (id,transaction_id,account_id,direction,amount_minor,balance_before_minor,balance_after_minor,reference_type,reference_id,correlation_id) '
+                    . "VALUES (:id,:transaction_id,:account_id,'DEBIT',:amount,:before,:after,'PLAYFIVER',:reference_id,:correlation_id)"
+                );
+                $stmt->execute([
+                    'id'=>$this->uuid(),'transaction_id'=>$transactionId,'account_id'=>$account['id'],'amount'=>$betMinor,
+                    'before'=>$before,'after'=>$afterBet,'reference_id'=>$providerTransactionId,'correlation_id'=>$correlationId,
+                ]);
+            }
+            if ($winMinor > 0) {
+                $stmt = $pdo->prepare(
+                    'INSERT INTO ledger_entries (id,transaction_id,account_id,direction,amount_minor,balance_before_minor,balance_after_minor,reference_type,reference_id,correlation_id) '
+                    . "VALUES (:id,:transaction_id,:account_id,'CREDIT',:amount,:before,:after,'PLAYFIVER',:reference_id,:correlation_id)"
+                );
+                $stmt->execute([
+                    'id'=>$this->uuid(),'transaction_id'=>$transactionId,'account_id'=>$account['id'],'amount'=>$winMinor,
+                    'before'=>$afterBet,'after'=>$after,'reference_id'=>$providerTransactionId,'correlation_id'=>$correlationId,
+                ]);
+            }
+
+            if ($after !== $before) {
+                $stmt = $pdo->prepare('UPDATE wallet_accounts SET balance_minor=:balance,updated_at=NOW() WHERE id=:id');
+                $stmt->execute(['balance'=>$after,'id'=>$account['id']]);
+            }
+            $stmt = $pdo->prepare('UPDATE idempotency_keys SET transaction_id=:transaction_id WHERE `key`=:key AND scope=:scope');
+            $stmt->execute(['transaction_id'=>$transactionId,'key'=>$idempotencyKey,'scope'=>$scope]);
+
+            return [
+                'transaction_id'=>$transactionId,
+                'correlation_id'=>$correlationId,
+                'balance_minor'=>$after,
+                'currency'=>$account['currency'],
+                'idempotent_replay'=>false,
+            ];
+        });
+    }
+
     private function move(
         string $userId,
         string $accountType,

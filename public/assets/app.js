@@ -130,8 +130,18 @@
     if(favorite){event.preventDefault();event.stopPropagation();toggleFavorite(favorite.dataset.favoriteToggle);renderCatalog();return;}
     const category=event.target.closest('[data-category-filter]');if(category){catalog.category=category.dataset.categoryFilter;renderCatalog();return;}
     const provider=event.target.closest('[data-provider-view]');if(provider){catalog.provider=provider.dataset.providerView||'';catalog.category='ALL';catalog.query='';const search=$('#public-game-search');if(search)search.value='';section('casino');renderCatalog();return;}
-    const game=event.target.closest('[data-game-id]');if(game){const selected=catalog.games.find(item=>Number(item.id)===Number(game.dataset.gameId));if(selected)openGamePage(selected);else toast('Jogo indisponível.');}
+    const game=event.target.closest('[data-game-id]');if(game){const selected=catalog.games.find(item=>Number(item.id)===Number(game.dataset.gameId));if(!selected){toast('Jogo indisponível.');return;}if(String(selected.api_source||'').toUpperCase()==='PLAYFIVER'){launchPlayfiverGame(selected);return;}openGamePage(selected);}
   });
+  async function launchPlayfiverGame(game){
+    if(!state.user){openAuth('login');toast('Entre na sua conta para abrir o jogo.');return;}
+    toast('Abrindo '+game.name+'...');
+    try{
+      const result=await api('/api/casino/playfiver/launch',{method:'POST',body:JSON.stringify({game_id:Number(game.id)})});
+      const target=new URL(String(result.launch_url||''));
+      if(target.protocol!=='https:')throw new Error('URL de lançamento inválida.');
+      window.location.assign(target.href);
+    }catch(error){toast(error.message||'Não foi possível abrir o jogo.');}
+  }
   let previousGameSection='home';
   function openGamePage(game){
     previousGameSection=$('.page-section.active')?.id?.replace('section-','')||'home';

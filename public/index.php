@@ -20,7 +20,7 @@ use App\Modules\Analytics\AnalyticsService;
 use App\Modules\Auth\AuthService;
 use App\Modules\Casino\CasinoCatalogService;
 use App\Modules\Casino\PlayfiverConfigService;
-use App\Modules\Casino\PlayfiverCatalogSyncService;
+use App\Modules\Casino\PlayfiverGameService;
 use App\Modules\Payments\GatewayConfigRepository;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\PaymentService;
@@ -43,7 +43,7 @@ $adminUsers = new AdminUserService($wallet);
 $analytics = new AnalyticsService();
 $casino = new CasinoCatalogService();
 $playfiverConfig = new PlayfiverConfigService(new SecretBox());
-$playfiverCatalogSync = new PlayfiverCatalogSyncService($playfiverConfig);
+$playfiverGames = new PlayfiverGameService($playfiverConfig, $wallet, $users);
 $platform = new PlatformService();
 
 $router->get('/health', fn() => ['status' => 'ok', 'service' => 'igaming-php']);
@@ -91,8 +91,23 @@ $router->get('/api/wallet', function (Request $request) use ($auth,$wallet) { $u
 $router->get('/api/wallet/transactions', function (Request $request) use ($auth,$wallet) { $user=$auth->authenticate($request->bearerToken()); if(!$user)Response::json(['error'=>'unauthorized'],401); return ['transactions'=>$wallet->transactions($user['id'],isset($request->query['limit'])?(int)$request->query['limit']:50)]; });
 
 $router->get('/admin/api/casino/playfiver', function (Request $request) use ($adminAuth,$playfiverConfig) { if (!$adminAuth->authenticate($request->bearerToken())) Response::json(['error'=>'unauthorized'],401); return ['config'=>$playfiverConfig->publicConfig()]; });
-$router->post('/admin/api/casino/playfiver', function (Request $request) use ($adminAuth,$playfiverConfig,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$playfiverConfig->save($request->body); $audit->record('ADMIN',(string)$admin['id'],'casino.playfiver_credentials_saved','casino_api_credentials','playfiver',$request->clientIp(),['configured'=>$result['configured'],'enabled'=>false]); return ['config'=>$result]; });
-$router->post('/admin/api/casino/playfiver/sync', function (Request $request) use ($adminAuth,$playfiverCatalogSync,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$playfiverCatalogSync->sync(); $audit->record('ADMIN',(string)$admin['id'],'casino.playfiver_catalog_synced','casino_catalog','playfiver',$request->clientIp(),$result); return ['sync'=>$result]; });
+$router->post('/admin/api/casino/playfiver', function (Request $request) use ($adminAuth,$playfiverConfig,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$playfiverConfig->save($request->body); $audit->record('ADMIN',(string)$admin['id'],'casino.playfiver_credentials_saved','casino_api_credentials','playfiver',$request->clientIp(),['configured'=>$result['configured'],'enabled'=>(bool)$result['enabled']]); return ['config'=>$result]; });
+$router->post('/api/casino/playfiver/launch', function (Request $request) use ($auth,$playfiverGames) {
+    $user=$auth->authenticate($request->bearerToken());
+    if(!$user) Response::json(['error'=>'unauthorized'],401);
+    return $playfiverGames->launch($user,(int)($request->body['game_id']??0));
+});
+$playfiverCallback = function (Request $request) use ($playfiverGames) {
+    try {
+        return $playfiverGames->handleCallback($request->body);
+    } catch (DomainException $error) {
+        $message=$error->getMessage();
+        $status=match($message){'INVALID_CREDENTIALS'=>401,'USER_NOT_FOUND'=>404,'PLAYFIVER_DISABLED'=>503,default=>400};
+        Response::json(['msg'=>$message],$status);
+    }
+};
+$router->post('/api/webhooks/casino/playfiver', $playfiverCallback);
+$router->post('/playfiver/webhook', $playfiverCallback);
 $router->get('/api/casino/providers', fn() => ['providers'=>$casino->publicProviders()]);
 $router->get('/api/casino/categories', fn() => ['categories'=>$casino->categories(true)]);
 $router->get('/api/casino/games', fn() => ['games'=>$casino->games(true)]);

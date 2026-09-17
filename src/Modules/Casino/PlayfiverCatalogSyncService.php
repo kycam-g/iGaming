@@ -14,33 +14,51 @@ final class PlayfiverCatalogSyncService
     public function __construct(private readonly PlayfiverConfigService $config) {}
 
     /**
-     * Sincroniza o catálogo público da PlayFiver.
-     * Logos locais dos provedores nunca são sobrescritas.
+     * Sincroniza provedores e jogos usando o protocolo observado na base funcional:
+     * POST no catálogo com method=provider_list e method=game_list.
+     * Logos, destaque, ordem e acessos definidos no MZ90 são preservados.
      */
     public function sync(): array
     {
         if (!$this->gameSourceColumnsExist()) {
             throw new DomainException('Execute as migrations para habilitar a sincronização do catálogo PlayFiver.');
         }
+        if (function_exists('set_time_limit')) @set_time_limit(0);
 
-        $baseUrl = rtrim((string)($this->config->publicConfig()['base_url'] ?? 'https://api.playfivers.com'), '/');
-        $providersPayload = $this->requestFirst($baseUrl, [
-            '/api/v1/providers',
-            '/v1/providers',
-            '/api/providers',
-            '/providers',
-        ]);
-        $gamesPayload = $this->requestFirst($baseUrl, [
-            '/api/v1/games',
-            '/v1/games',
-            '/api/games',
-            '/games',
-        ]);
+        $credentials = $this->config->catalogCredentials();
+        $catalogUrl = rtrim($credentials['catalog_url'], '/');
+        $agentCode = $credentials['agent_code'];
+        $agentToken = $credentials['agent_token'];
 
-        $providers = $this->extractList($providersPayload, ['providers', 'data.providers', 'data.items', 'items', 'data']);
-        $games = $this->extractList($gamesPayload, ['games', 'data.games', 'data.items', 'items', 'data']);
-        if (!$providers) throw new DomainException('A PlayFiver não retornou provedores para sincronizar.');
-        if (!$games) throw new DomainException('A PlayFiver não retornou jogos para sincronizar.');
+        $providerPayload = $this->postJson($catalogUrl, [
+            'method' => 'provider_list',
+            'agent_code' => $agentCode,
+            'agent_token' => $agentToken,
+        ]);
+        $this->assertSuccess($providerPayload, 'provider_list');
+        $providers = $this->extractList($providerPayload, ['providers','data.providers','data']);
+        if (!$providers) throw new DomainException('O catálogo PlayFiver não retornou provedores.');
+
+        $remote = [];
+        $gamesFetched = 0;
+        foreach ($providers as $provider) {
+            if (!is_array($provider)) continue;
+            $remoteCode = trim((string)($provider['code'] ?? $provider['provider_code'] ?? ''));
+            if ($remoteCode === '') continue;
+
+            $gamePayload = $this->postJson($catalogUrl, [
+                'method' => 'game_list',
+                'agent_code' => $agentCode,
+                'agent_token' => $agentToken,
+                'provider_code' => $remoteCode,
+            ]);
+            $this->assertSuccess($gamePayload, 'game_list/'.$remoteCode);
+            $games = $this->extractList($gamePayload, ['games','data.games','data']);
+            $gamesFetched += count($games);
+            $remote[] = ['provider'=>$provider,'games'=>$games];
+        }
+
+        if (!$remote) throw new DomainException('Nenhum provedor válido foi retornado pelo catálogo PlayFiver.');
 
         $pdo = Database::connection();
         $providerCount = 0;
@@ -50,43 +68,16 @@ final class PlayfiverCatalogSyncService
 
         $pdo->beginTransaction();
         try {
-            // Somente itens sincronizados pela API podem ser desativados por ausência no catálogo remoto.
+            // Como todas as listas foram obtidas antes desta transação, é seguro ocultar itens remotos ausentes.
             $pdo->exec("UPDATE casino_games SET enabled=0 WHERE api_source='PLAYFIVER'");
             $pdo->exec("UPDATE casino_providers SET enabled=0 WHERE api_source='PLAYFIVER'");
 
             $providerUpsert = $pdo->prepare(
                 "INSERT INTO casino_providers(code,name,enabled,mode,api_source)\n" .
-                "VALUES(:code,:name,:enabled,'DEMO','PLAYFIVER')\n" .
-                "ON DUPLICATE KEY UPDATE name=VALUES(name),enabled=VALUES(enabled),api_source='PLAYFIVER'"
+                "VALUES(:code,:name,:enabled,'PRODUCTION','PLAYFIVER')\n" .
+                "ON DUPLICATE KEY UPDATE name=VALUES(name),enabled=VALUES(enabled),mode='PRODUCTION',api_source='PLAYFIVER'"
             );
             $providerLookup = $pdo->prepare('SELECT id FROM casino_providers WHERE code=:code LIMIT 1');
-
-            $providerIds = [];
-            foreach ($providers as $provider) {
-                if (!is_array($provider)) continue;
-                $remoteCode = trim((string)($provider['code'] ?? $provider['provider_code'] ?? $provider['slug'] ?? ''));
-                if ($remoteCode === '') continue;
-                $code = $this->normalizeProviderCode($remoteCode);
-                if ($code === '') continue;
-                $name = trim((string)($provider['name'] ?? $provider['provider_name'] ?? $remoteCode));
-                $name = $name !== '' ? mb_substr($name, 0, 120) : strtoupper($code);
-                $enabled = $this->remoteEnabled($provider['status'] ?? $provider['enabled'] ?? 1);
-                $providerUpsert->execute(['code'=>$code,'name'=>$name,'enabled'=>$enabled]);
-                $providerLookup->execute(['code'=>$code]);
-                $id = (int)$providerLookup->fetchColumn();
-                if ($id > 0) {
-                    $providerIds[strtolower($remoteCode)] = $id;
-                    $providerIds[strtolower($code)] = $id;
-                    $providerCount++;
-                }
-            }
-
-            // Alguns catálogos podem trazer jogos de provedores não listados no endpoint de provedores.
-            $ensureProvider = $pdo->prepare(
-                "INSERT INTO casino_providers(code,name,enabled,mode,api_source)\n" .
-                "VALUES(:code,:name,1,'DEMO','PLAYFIVER')\n" .
-                "ON DUPLICATE KEY UPDATE name=VALUES(name),api_source='PLAYFIVER'"
-            );
 
             $gameUpsert = $pdo->prepare(
                 "INSERT INTO casino_games(provider_id,external_id,name,category,image_url,enabled,featured,sort_order,access_count,api_source,source_type,source_distribution,source_original,last_synced_at)\n" .
@@ -94,47 +85,48 @@ final class PlayfiverCatalogSyncService
                 "ON DUPLICATE KEY UPDATE name=VALUES(name),category=VALUES(category),image_url=VALUES(image_url),enabled=VALUES(enabled),api_source='PLAYFIVER',source_type=VALUES(source_type),source_distribution=VALUES(source_distribution),source_original=VALUES(source_original),last_synced_at=VALUES(last_synced_at)"
             );
 
-            foreach ($games as $game) {
-                if (!is_array($game)) { $skippedGames++; continue; }
-                $remoteProvider = trim((string)($game['provider'] ?? $game['provider_code'] ?? $game['providerCode'] ?? ''));
-                $externalId = trim((string)($game['game_code'] ?? $game['gameCode'] ?? $game['code'] ?? $game['id'] ?? ''));
-                $name = trim((string)($game['game_name'] ?? $game['gameName'] ?? $game['name'] ?? ''));
-                if ($remoteProvider === '' || $externalId === '' || $name === '') { $skippedGames++; continue; }
+            foreach ($remote as $bundle) {
+                $provider = $bundle['provider'];
+                $remoteCode = trim((string)($provider['code'] ?? $provider['provider_code'] ?? ''));
+                $code = $this->normalizeProviderCode($remoteCode);
+                if ($code === '') continue;
+                $name = trim((string)($provider['name'] ?? $provider['provider_name'] ?? $remoteCode));
+                $name = $this->cleanProviderName($name !== '' ? $name : $remoteCode, $remoteCode);
+                $providerType = trim((string)($provider['gameType'] ?? $provider['game_type'] ?? $provider['type'] ?? ''));
+                $enabled = $this->remoteEnabled($provider['status'] ?? $provider['enabled'] ?? 1);
 
-                $key = strtolower($remoteProvider);
-                $providerId = (int)($providerIds[$key] ?? 0);
-                if ($providerId <= 0) {
-                    $code = $this->normalizeProviderCode($remoteProvider);
-                    if ($code === '') { $skippedGames++; continue; }
-                    $ensureProvider->execute(['code'=>$code,'name'=>mb_substr($remoteProvider,0,120)]);
-                    $providerLookup->execute(['code'=>$code]);
-                    $providerId = (int)$providerLookup->fetchColumn();
-                    if ($providerId <= 0) { $skippedGames++; continue; }
-                    $providerIds[$key] = $providerId;
-                    $providerIds[strtolower($code)] = $providerId;
-                    $providerCount++;
+                $providerUpsert->execute(['code'=>$code,'name'=>mb_substr($name,0,120),'enabled'=>$enabled]);
+                $providerLookup->execute(['code'=>$code]);
+                $providerId = (int)$providerLookup->fetchColumn();
+                if ($providerId <= 0) continue;
+                $providerCount++;
+
+                foreach ($bundle['games'] as $game) {
+                    if (!is_array($game)) { $skippedGames++; continue; }
+                    $externalId = trim((string)($game['game_code'] ?? $game['gameCode'] ?? $game['code'] ?? $game['id'] ?? ''));
+                    $gameName = trim((string)($game['game_name'] ?? $game['gameName'] ?? $game['name'] ?? ''));
+                    if ($externalId === '' || $gameName === '') { $skippedGames++; continue; }
+
+                    $type = trim((string)($game['game_type'] ?? $game['gameType'] ?? $game['type'] ?? $providerType));
+                    $image = trim((string)($game['banner'] ?? $game['img_url'] ?? $game['image_url'] ?? $game['image'] ?? $game['icon'] ?? ''));
+                    if ($image !== '' && (!$this->validHttpsUrl($image))) $image = '';
+                    $gameEnabled = $this->remoteEnabled($game['status'] ?? $game['enabled'] ?? 1);
+                    $original = $this->gameOriginal($remoteCode, $game['game_original'] ?? $game['original'] ?? null);
+
+                    $gameUpsert->execute([
+                        'provider_id'=>$providerId,
+                        'external_id'=>mb_substr($externalId,0,190),
+                        'name'=>mb_substr($gameName,0,190),
+                        'category'=>$this->mapCategory($type, $remoteCode, $gameName),
+                        'image_url'=>$image !== '' ? mb_substr($image,0,500) : null,
+                        'enabled'=>$gameEnabled,
+                        'source_type'=>mb_substr($type !== '' ? $type : 'slot',0,60),
+                        'source_distribution'=>mb_substr(trim((string)($game['distribution'] ?? '')),0,60) ?: null,
+                        'source_original'=>$original ? '1' : '0',
+                        'last_synced_at'=>$now,
+                    ]);
+                    $gameCount++;
                 }
-
-                $type = trim((string)($game['game_type'] ?? $game['gameType'] ?? $game['type'] ?? 'slot'));
-                $image = trim((string)($game['img_url'] ?? $game['image_url'] ?? $game['image'] ?? $game['icon'] ?? ''));
-                if ($image !== '' && (!filter_var($image, FILTER_VALIDATE_URL) || !str_starts_with(strtolower($image), 'https://'))) $image = '';
-                $enabled = $this->remoteEnabled($game['status'] ?? $game['enabled'] ?? 1);
-                $externalId = mb_substr($externalId, 0, 190);
-                $name = mb_substr($name, 0, 190);
-
-                $gameUpsert->execute([
-                    'provider_id'=>$providerId,
-                    'external_id'=>$externalId,
-                    'name'=>$name,
-                    'category'=>$this->mapCategory($type),
-                    'image_url'=>$image !== '' ? mb_substr($image,0,500) : null,
-                    'enabled'=>$enabled,
-                    'source_type'=>mb_substr($type,0,60),
-                    'source_distribution'=>mb_substr(trim((string)($game['distribution'] ?? '')),0,60) ?: null,
-                    'source_original'=>mb_substr(trim((string)($game['original'] ?? '')),0,20) ?: null,
-                    'last_synced_at'=>$now,
-                ]);
-                $gameCount++;
             }
 
             $pdo->commit();
@@ -146,35 +138,26 @@ final class PlayfiverCatalogSyncService
         return [
             'providers_synced'=>$providerCount,
             'games_synced'=>$gameCount,
+            'games_received'=>$gamesFetched,
             'games_skipped'=>$skippedGames,
-            'base_url'=>$baseUrl,
+            'catalog_url'=>$catalogUrl,
             'synced_at'=>$now,
         ];
     }
 
-    private function requestFirst(string $baseUrl, array $paths): array
-    {
-        $lastError = 'Endpoint indisponível.';
-        foreach ($paths as $path) {
-            try {
-                return $this->request($baseUrl . $path);
-            } catch (\Throwable $error) {
-                $lastError = $error->getMessage();
-            }
-        }
-        throw new DomainException('Não foi possível consultar o catálogo PlayFiver: ' . $lastError);
-    }
-
-    private function request(string $url): array
+    private function postJson(string $url, array $payload): array
     {
         if (!function_exists('curl_init')) throw new RuntimeException('Extensão cURL do PHP não está habilitada.');
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES|JSON_THROW_ON_ERROR);
         $ch = curl_init($url);
         curl_setopt_array($ch, [
             CURLOPT_RETURNTRANSFER=>true,
             CURLOPT_FOLLOWLOCATION=>false,
-            CURLOPT_CONNECTTIMEOUT=>12,
-            CURLOPT_TIMEOUT=>90,
-            CURLOPT_HTTPHEADER=>['Accept: application/json','User-Agent: MZ90-Catalog-Sync/1.0'],
+            CURLOPT_CONNECTTIMEOUT=>10,
+            CURLOPT_TIMEOUT=>45,
+            CURLOPT_POST=>true,
+            CURLOPT_POSTFIELDS=>$json,
+            CURLOPT_HTTPHEADER=>['Accept: application/json','Content-Type: application/json','User-Agent: MZ90-PlayFiver/1.0'],
             CURLOPT_SSL_VERIFYPEER=>true,
             CURLOPT_SSL_VERIFYHOST=>2,
         ]);
@@ -184,11 +167,39 @@ final class PlayfiverCatalogSyncService
         $contentType = (string)curl_getinfo($ch, CURLINFO_CONTENT_TYPE);
         curl_close($ch);
         if ($raw === false) throw new RuntimeException('Falha de rede: '.$error);
-        if ($status < 200 || $status >= 300) throw new RuntimeException('HTTP '.$status.' em '.$url);
         if (strlen((string)$raw) > 30 * 1024 * 1024) throw new RuntimeException('Resposta do catálogo excedeu o limite de 30 MB.');
         $decoded = json_decode((string)$raw, true, 512, JSON_BIGINT_AS_STRING);
-        if (!is_array($decoded)) throw new RuntimeException('Resposta inválida (esperado JSON; recebido '.($contentType ?: 'conteúdo desconhecido').').');
+        if ($status < 200 || $status >= 300) {
+            $remoteMessage = '';
+            if (is_array($decoded)) {
+                foreach (['msg','message','error','detail'] as $key) {
+                    if (isset($decoded[$key]) && is_scalar($decoded[$key])) {
+                        $candidate = trim((string)$decoded[$key]);
+                        if ($candidate !== '') { $remoteMessage = $candidate; break; }
+                    }
+                }
+            }
+            if ($remoteMessage !== '') {
+                $remoteMessage = mb_substr(preg_replace('/[\r\n\t]+/', ' ', $remoteMessage) ?? $remoteMessage, 0, 240);
+                throw new RuntimeException('HTTP '.$status.' no catálogo Games2API: '.$remoteMessage);
+            }
+            if ($status === 400 || $status === 401 || $status === 403) {
+                throw new RuntimeException('HTTP '.$status.' no catálogo Games2API. Confira o Catalog Agent Code e o Catalog Agent Token; são credenciais próprias do catálogo e podem ser diferentes das credenciais PlayFiver.');
+            }
+            throw new RuntimeException('HTTP '.$status.' ao consultar o catálogo Games2API.');
+        }
+        if (!is_array($decoded)) throw new RuntimeException('Resposta inválida do catálogo Games2API (esperado JSON; recebido '.($contentType ?: 'conteúdo desconhecido').').');
         return $decoded;
+    }
+
+    private function assertSuccess(array $payload, string $operation): void
+    {
+        if (!array_key_exists('status', $payload)) return;
+        $status = $payload['status'];
+        $ok = $status === true || $status === 1 || $status === '1' || strtolower((string)$status) === 'success';
+        if ($ok) return;
+        $message = trim((string)($payload['msg'] ?? $payload['message'] ?? 'Falha sem mensagem.'));
+        throw new DomainException('PlayFiver '.$operation.': '.$message);
     }
 
     private function extractList(array $payload, array $paths): array
@@ -212,22 +223,48 @@ final class PlayfiverCatalogSyncService
         return trim(substr($code, 0, 60), '_-');
     }
 
+    private function cleanProviderName(string $name, string $remoteCode): string
+    {
+        if (preg_match('/[\x{1100}-\x{11FF}\x{3130}-\x{318F}\x{AC00}-\x{D7A3}]/u', $name)) {
+            $name = explode('_', $remoteCode, 2)[0];
+        }
+        return trim($name);
+    }
+
     private function remoteEnabled(mixed $value): int
     {
         if (is_bool($value)) return $value ? 1 : 0;
+        if (is_int($value) || is_float($value)) return ((int)$value) === 1 ? 1 : 0;
         $v = strtolower(trim((string)$value));
-        return in_array($v, ['1','true','active','enabled','online','on'], true) ? 1 : 0;
+        return in_array($v, ['1','true','active','enabled','online','on','open'], true) ? 1 : 0;
     }
 
-    private function mapCategory(string $type): string
+    private function mapCategory(string $type, string $providerCode, string $gameName): string
     {
-        $value = strtolower(trim($type));
-        if (str_contains($value, 'fish') || str_contains($value, 'pool')) return 'OTHER';
-        if (str_contains($value, 'sport')) return 'LIVE';
+        $value = strtolower(trim($type.' '.$providerCode.' '.$gameName));
+        if (str_contains($value, 'fish') || str_contains($value, 'fishing') || str_contains($value, 'pesc')) return 'OTHER';
+        if (str_contains($value, 'sport') || str_contains($value, 'sportsbook')) return 'LIVE';
         if (str_contains($value, 'roulette') || str_contains($value, 'table') || str_contains($value, 'blackjack') || str_contains($value, 'baccarat')) return 'TABLE';
         if (str_contains($value, 'live')) return 'LIVE';
-        if (str_contains($value, 'slot')) return 'SLOTS';
-        return 'OTHER';
+        if ($type === '1' || str_contains($value, 'slot')) return 'SLOTS';
+        if ($type !== '' && $type !== '1') return 'LIVE';
+        return 'SLOTS';
+    }
+
+    private function gameOriginal(string $providerCode, mixed $remote): bool
+    {
+        if ($remote !== null && $remote !== '') {
+            if (is_bool($remote)) return $remote;
+            return in_array(strtolower(trim((string)$remote)), ['1','true','yes','original'], true);
+        }
+        $provider = strtoupper(trim($providerCode));
+        if ($provider === 'PGSOFT') return false;
+        return in_array($provider, ['CQ9','JDB','FC','TD','SG','ACEWIN'], true);
+    }
+
+    private function validHttpsUrl(string $url): bool
+    {
+        return (bool)filter_var($url, FILTER_VALIDATE_URL) && strtolower((string)parse_url($url, PHP_URL_SCHEME)) === 'https';
     }
 
     private function gameSourceColumnsExist(): bool

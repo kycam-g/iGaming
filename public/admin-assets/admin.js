@@ -258,19 +258,6 @@ async function loadCasino(){
  }catch(error){alertBox('#casino-alert',error.message)}
 }
 $('#casino-refresh').addEventListener('click',loadCasino);
-$('#sync-playfiver')?.addEventListener('click',async()=>{
- const button=$('#sync-playfiver');const status=$('#playfiver-sync-status');
- if(!confirm('Sincronizar agora todos os provedores e jogos publicados pela PlayFiver? As logos cadastradas manualmente serão preservadas.'))return;
- button.disabled=true;const previous=button.textContent;button.textContent='↻ Sincronizando...';if(status)status.textContent='Consultando provedores e jogos da PlayFiver. Isso pode levar alguns segundos.';
- try{
-   const result=await api('/admin/api/casino/playfiver/sync',{method:'POST',body:'{}'});const sync=result.sync||{};
-   await loadCasino();
-   const message=`PlayFiver sincronizada: ${Number(sync.providers_synced||0).toLocaleString('pt-BR')} provedores e ${Number(sync.games_synced||0).toLocaleString('pt-BR')} jogos.`;
-   if(status)status.textContent=message+(Number(sync.games_skipped||0)?` ${sync.games_skipped} item(ns) ignorado(s) por dados incompletos.`:'');
-   alertBox('#casino-alert',message,true);
- }catch(error){if(status)status.textContent='Falha na sincronização: '+error.message;alertBox('#casino-alert',error.message)}
- finally{button.disabled=false;button.textContent=previous}
-});
 $('#casino-game-filters').addEventListener('submit',event=>{event.preventDefault();casinoGamePage=1;renderCasinoGames()});
 $('#casino-game-search').addEventListener('input',()=>{casinoGamePage=1;renderCasinoGames()});
 for(const id of ['casino-game-api-filter','casino-game-provider-filter','casino-games-limit'])$('#'+id).addEventListener('change',()=>{casinoGamePage=1;renderCasinoGames()});
@@ -290,7 +277,7 @@ $('#casino-game-form').addEventListener('submit',async e=>{e.preventDefault();co
  const choose=(tab,expand=true)=>{
    tabs.forEach(b=>b.classList.toggle('active',b.dataset.casinoTab===tab));
    const title=tab==='providers'?'Provedores':tab==='categories'?'Categorias de jogos':tab==='credentials'?'Credenciais das APIs':'Gerenciamento de Jogos API';
-   const description=tab==='providers'?'Gerencie os provedores cadastrados.':tab==='categories'?'Organize Slots, Pescaria, SportBet, Roleta e outras categorias.':tab==='credentials'?'Credenciais armazenadas com criptografia; abertura de jogos pendente.':'Busca, filtros e visibilidade do catálogo.';
+   const description=tab==='providers'?'Gerencie os provedores cadastrados.':tab==='categories'?'Organize Slots, Pescaria, SportBet, Roleta e outras categorias.':tab==='credentials'?'Credenciais PlayFiver criptografadas, game launch e callback financeiro.':'Busca, filtros e visibilidade do catálogo.';
    if(!document.querySelector('#page-casino').classList.contains('hidden')) setHeading('PLATAFORMA',title,description);
    const panelId=tab==='providers'?'casino-providers-panel':tab==='categories'?'casino-categories-panel':tab==='credentials'?'casino-credentials-panel':'casino-games-panel';
    document.querySelectorAll('.casino-panel').forEach(p=>p.classList.toggle('hidden',p.id!==panelId));
@@ -307,8 +294,8 @@ $('#casino-game-form').addEventListener('submit',async e=>{e.preventDefault();co
  choose('games',false);
 })();
 
-async function loadPlayfiverConfig(){try{const d=await api('/admin/api/casino/playfiver');const c=d.config;$('#playfiver-form').elements.base_url.value=c.base_url;$('#playfiver-status').textContent=c.configured?'Credenciais armazenadas · Integração desativada':'Credenciais não configuradas';}catch(e){alertBox('#playfiver-alert',e.message)}}
-$('#playfiver-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const btn=f.querySelector('[type="submit"]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(f));await api('/admin/api/casino/playfiver',{method:'POST',body:JSON.stringify(data)});f.elements.agent_code.value='';f.elements.agent_token.value='';f.elements.agent_secret.value='';await loadPlayfiverConfig();alertBox('#playfiver-alert','Credenciais salvas com criptografia. Integração permanece desativada.',true)}catch(err){alertBox('#playfiver-alert',err.message)}finally{btn.disabled=false}});
+async function loadPlayfiverConfig(){try{const d=await api('/admin/api/casino/playfiver');const c=d.config,f=$('#playfiver-form');f.elements.base_url.value=c.base_url||'https://api.playfivers.com';f.elements.enabled.checked=!!c.enabled;let status='Credenciais PlayFiver não configuradas';if(c.configured)status=c.enabled?'PlayFiver ativa':'PlayFiver configurada, porém desativada';$('#playfiver-status').textContent=status;const callback=$('#playfiver-callback-url');if(callback)callback.textContent=location.origin+(window.IGAMING?.basePath||'')+'/api/webhooks/casino/playfiver';}catch(e){alertBox('#playfiver-alert',e.message)}}
+$('#playfiver-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const btn=f.querySelector('[type="submit"]');btn.disabled=true;try{const data=Object.fromEntries(new FormData(f));data.enabled=f.elements.enabled.checked;await api('/admin/api/casino/playfiver',{method:'POST',body:JSON.stringify(data)});for(const name of ['agent_code','agent_token','agent_secret'])f.elements[name].value='';await loadPlayfiverConfig();alertBox('#playfiver-alert','Integração PlayFiver salva com credenciais criptografadas.',true)}catch(err){alertBox('#playfiver-alert',err.message)}finally{btn.disabled=false}});
 document.querySelector('[data-casino-tab="credentials"]').addEventListener('click',loadPlayfiverConfig);
 
 // Plataforma: controles administrativos autenticados, sem mutação de saldo.

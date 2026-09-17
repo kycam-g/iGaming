@@ -17,7 +17,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($appName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260917-v12-10-favicon">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260917-v12-14-playfiver-local-catalog">
 </head>
 <body>
 <div class="mobile-stage">
@@ -83,7 +83,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <article class="game-detail-panel">
         <div class="game-detail-art" id="game-detail-art"></div>
         <div class="game-detail-content"><span class="game-detail-eyebrow">JOGO DO CATÁLOGO</span><h1 id="game-detail-name">Jogo</h1><p id="game-detail-provider"></p>
-          <div class="game-availability" role="status">Abertura indisponível até a integração segura do provedor. Não há sessão de aposta ativa.</div>
+          <div class="game-availability" role="status">Este jogo do catálogo local ainda não possui integração de lançamento.</div>
           <p class="game-online-placeholder"><span aria-hidden="true" class="online-dot unavailable" id="detail-online-dot"></span> Acessos: <strong id="detail-online-count">—</strong></p>
         </div>
       </article>
@@ -182,6 +182,6 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$appName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260917-v12-10-favicon"></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260917-v12-14-playfiver-local-catalog"></script>
 </body>
 </html>

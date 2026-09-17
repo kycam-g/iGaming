@@ -825,21 +825,30 @@ Migration:
 - Favicon cadastrado em Aparência passa a ser usado na aba do navegador.
 - Funciona no site, Admin e login.
 
-### V12.11
+### V12.11–V12.13 — histórico corrigido
 
-- Estrutura de sincronização de catálogo PlayFiver.
-- Upsert de provedores/jogos.
-- Logos manuais preservadas.
-- Jogos desaparecidos do remoto são preparados para desativação, não exclusão.
-- Sincronização via Admin e CLI.
+Essas versões foram experimentais na integração PlayFiver. Elas chegaram a testar uma sincronização externa de catálogo que misturava PlayFiver com Games2API/FiverScan. Essa premissa foi posteriormente identificada como incorreta e **foi removida integralmente na V12.14**.
+
+Os arquivos históricos dessas versões são mantidos apenas para rastreabilidade. O estado atual do código **não depende de Games2API/FiverScan**.
+
+### V12.14 — PlayFiver separada + catálogo local
+
+- PlayFiver usa apenas `https://api.playfivers.com`, Agent Code, Agent Token e Agent Secret.
+- Game launch em `POST /api/v2/game_launch`.
+- Callback em `/api/webhooks/casino/playfiver` e `/playfiver/webhook`.
+- Eventos `BALANCE`, `Bet`, `Win` e `WinBet` processados no `WalletService`/ledger.
+- `txn_id` é idempotente; `user_after_balance` remoto nunca sobrescreve a carteira local.
+- Catálogo passa a ser local e versionado por migration.
+- `016_playfiver_documented_catalog.sql` cadastra **13 provedores e 879 jogos** da listagem documental usada como referência.
+- Logos de provedores permanecem manuais; a migration nunca altera `logo_path`.
+- Capas de jogos são adicionadas apenas quando há correspondência confiável com a base funcional fornecida; não são inventadas capas/códigos.
+- Categorias adicionais `LIVE_CASINO` e `CRASH` evitam classificar cassino ao vivo como SportBet.
 
 Migration:
 
 ```text
-015_playfiver_catalog_sync.sql
+016_playfiver_documented_catalog.sql
 ```
-
-**Observação:** a sincronização V12.11 ainda depende da confirmação dos endpoints oficiais de catálogo PlayFiver. O endpoint testado retornou HTML, portanto essa parte deve ser considerada **em validação**, não concluída.
 
 ---
 
@@ -847,14 +856,11 @@ Migration:
 
 Prioridades atuais do projeto:
 
-1. Confirmar endpoints oficiais de catálogo PlayFiver.
-2. Finalizar sincronização real de todos os provedores e jogos.
-3. Implementar game launch real com autenticação correta.
-4. Integrar callbacks/rodadas ao WalletService e ledger.
-5. Implementar histórico de apostas.
-6. Implementar RTP observado somente a partir de dados reais.
-7. Implementar payout/saques reais após definição do gateway.
-8. Persistir favoritos no backend caso seja desejado sincronizar entre dispositivos.
+1. Homologar a integração PlayFiver V12.14 com credenciais reais e callback em domínio HTTPS público.
+2. Implementar histórico de apostas no Admin usando os eventos reais do ledger.
+3. Implementar RTP observado somente a partir de apostas liquidadas reais.
+4. Implementar payout/saques reais após definição do gateway.
+5. Persistir favoritos no backend caso seja desejado sincronizar entre dispositivos.
 
 ---
 
@@ -890,4 +896,8 @@ composer install
 
 ## Observação final
 
-Este repositório representa o estado atual de desenvolvimento do MZ90. Recursos relacionados a dinheiro real, abertura de jogos, apostas e callbacks de provedores devem ser considerados disponíveis somente depois de integração, validação de segurança e testes no ambiente de produção.
+Este repositório representa o estado atual de desenvolvimento do MZ90. Abertura de jogos e callbacks PlayFiver estão implementados, mas devem ser considerados homologados para dinheiro real somente após validação com credenciais reais, callback HTTPS público e testes de liquidação/idempotência no ambiente de produção.
+
+### PlayFiver atual
+
+Consulte `PLAYFIVER-STATUS.md` e `ATUALIZACAO-V12.14.md`. O estado atual não possui qualquer dependência de Games2API/FiverScan.

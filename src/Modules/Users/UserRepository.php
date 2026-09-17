@@ -41,4 +41,15 @@ final class UserRepository
         $stmt->execute(['id' => $id]);
         return $stmt->fetch() ?: null;
     }
+
+    public function findByPublicId(string|int $publicId): ?array
+    {
+        $value = trim((string)$publicId);
+        if ($value === '' || !ctype_digit($value)) return null;
+        $stmt = Database::connection()->prepare(
+            'SELECT id,public_id,email,cpf,phone,username,status,created_at,updated_at FROM users WHERE public_id = :public_id LIMIT 1'
+        );
+        $stmt->execute(['public_id' => $value]);
+        return $stmt->fetch() ?: null;
+    }
 }

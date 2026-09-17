@@ -329,7 +329,8 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
 /* V12.11 — sincronização do catálogo PlayFiver */
 .games-api-title{display:flex;align-items:center;justify-content:space-between;gap:16px}
 .games-api-title-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
-#sync-playfiver{min-height:40px;padding:10px 14px;white-space:nowrap}
-#sync-playfiver:disabled{opacity:.6;cursor:wait}
 .casino-sync-status{margin:-6px 0 15px;padding:10px 12px;border:1px solid #30383f;border-radius:9px;background:#14191d;color:#aeb7c0;font-size:11px;line-height:1.5}
 @media(max-width:760px){.games-api-title{align-items:flex-start;flex-direction:column}.games-api-title-actions{width:100%;justify-content:flex-start}}
+
+/* V12.12 — integração PlayFiver */
+.playfiver-callback-box{margin-top:18px;padding:14px 16px;border:1px solid #313941;border-radius:10px;background:#11161a;display:grid;gap:7px}.playfiver-callback-box strong{color:#f3f6f8}.playfiver-callback-box code{display:block;overflow-wrap:anywhere;color:#ff7a70;background:#1a2025;border:1px solid #303840;border-radius:7px;padding:10px 12px}.playfiver-callback-box small{color:#9da8b2;line-height:1.45}
