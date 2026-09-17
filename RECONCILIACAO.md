@@ -1,5 +1,0 @@
-# Auditoria local de depósitos — V1
-
-No Admin > Financeiro, clique em VERIFICAR DIVERGÊNCIAS. O painel identifica depósitos PROCESSING, depósitos PAID sem financial_transactions vinculada e depósitos PENDING há mais de 30 minutos; informa também webhooks sem processed_at há mais de 5 minutos. Somente leitura, sem mutation de status, crédito ou chamada externa. O relatório mostra no máximo 100 ocorrências recentes.
-
-**Não é conciliação com a Pixup:** a documentação oficial consultada confirma criação de cash-in e webhooks, mas não foi possível confirmar uma rota de consulta de status compatível com a integração atual. Não invente endpoint nem trate PENDING antigo como pagamento. Para habilitar a conciliação remota, obter do provedor a rota oficial, formato de resposta, autenticação e ambiente de teste; validar transaction_id, external_id, amount, currency e status, e usar o fluxo financeiro idempotente existente com auditoria. Não habilitar crédito automático baseado em dados não autenticados.

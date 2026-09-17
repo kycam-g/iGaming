@@ -13,13 +13,13 @@ final class PlatformService
     public function settings(): array
     {
         $rows=$this->db()->query('SELECT setting_key,setting_value FROM platform_settings')->fetchAll();
-        $data=['site_name'=>'MZ90','support_email'=>'','maintenance'=>'0','accent_color'=>'#e34324','footer_text'=>'','logo_path'=>'','favicon_path'=>''];
+        $data=['site_name'=>'MZ90','support_email'=>'','maintenance'=>'0','accent_color'=>'#e34324','footer_text'=>'','logo_path'=>'','favicon_path'=>'','footer_about'=>'','contact_phone'=>'','social_whatsapp'=>'','social_telegram'=>'','social_instagram'=>'','social_facebook'=>''];
         foreach($rows as $r) $data[$r['setting_key']]=$r['setting_value'];
         return $data;
     }
     public function saveSettings(array $input): array
     {
-        $allowed=['site_name','support_email','maintenance','accent_color','footer_text','logo_path','favicon_path'];
+        $allowed=['site_name','support_email','maintenance','accent_color','footer_text','logo_path','favicon_path','footer_about','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook'];
         $db=$this->db();
         $stmt=$db->prepare('INSERT INTO platform_settings (setting_key,setting_value) VALUES (:k,:v) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');
         foreach($allowed as $key){
@@ -27,9 +27,11 @@ final class PlatformService
             $value=trim((string)$input[$key]);
             if($key==='maintenance') $value=filter_var($input[$key],FILTER_VALIDATE_BOOLEAN)?'1':'0';
             if(in_array($key,['logo_path','favicon_path'],true)&&$value!==''&&!preg_match('~^/uploads/identity/[a-z0-9_-]+\.(png|jpg|webp)$~i',$value)) throw new DomainException('Imagem de identidade inválida.');
+            if(str_starts_with($key,'social_') && $value!=='' && (!filter_var($value,FILTER_VALIDATE_URL) || !str_starts_with(strtolower($value),'https://'))) throw new DomainException('A rede social exige uma URL HTTPS válida.');
+            if($key==='contact_phone' && $value!=='' && !preg_match('/^\+?[0-9() .-]{8,24}$/',$value)) throw new DomainException('Telefone de contato inválido.');
             if($key==='accent_color'&&!preg_match('/^#[0-9a-fA-F]{6}$/',$value)) throw new DomainException('Cor inválida.');
             if($key==='support_email'&&$value!==''&&!filter_var($value,FILTER_VALIDATE_EMAIL)) throw new DomainException('E-mail inválido.');
-            if(strlen($value)>($key==='footer_text'?250:120)) throw new DomainException('Campo muito longo.');
+            if(strlen($value)>(in_array($key,['footer_text','footer_about'],true)?500:255)) throw new DomainException('Campo muito longo.');
             $stmt->execute(['k'=>$key,'v'=>$value]);
         }
         return $this->settings();
@@ -86,6 +88,39 @@ final class PlatformService
         $stmt=$this->db()->prepare('DELETE FROM '.$table.' WHERE id=:id');
         $stmt->execute(['id'=>$id]);
         if(!$stmt->rowCount()) throw new DomainException('Registro não encontrado.');
+    }
+    public function announcements(bool $public=false): array
+    {
+        $sql='SELECT id,message,enabled,sort_order,created_at FROM platform_announcements';
+        if($public) $sql.=' WHERE enabled=1';
+        try { return $this->db()->query($sql.' ORDER BY sort_order ASC,id DESC LIMIT 100')->fetchAll(); }
+        catch (\Throwable) { return []; }
+    }
+    public function saveAnnouncement(array $input): array
+    {
+        $id=(int)($input['id']??0);
+        $message=trim((string)($input['message']??''));
+        $order=(int)($input['sort_order']??100);
+        if($id<0 || $message==='' || mb_strlen($message)>240 || $order<0 || $order>100000) throw new DomainException('Informe uma novidade de até 240 caracteres e uma ordem válida.');
+        $args=['message'=>$message,'enabled'=>filter_var($input['enabled']??false,FILTER_VALIDATE_BOOLEAN)?1:0,'sort_order'=>$order];
+        $db=$this->db();
+        if($id){
+            $args['id']=$id;
+            $stmt=$db->prepare('UPDATE platform_announcements SET message=:message,enabled=:enabled,sort_order=:sort_order WHERE id=:id');
+            $stmt->execute($args);
+            $check=$db->prepare('SELECT id FROM platform_announcements WHERE id=:id');$check->execute(['id'=>$id]);
+            if(!$check->fetchColumn()) throw new DomainException('Novidade não encontrada.');
+        }else{
+            $stmt=$db->prepare('INSERT INTO platform_announcements(message,enabled,sort_order) VALUES(:message,:enabled,:sort_order)');
+            $stmt->execute($args);$id=(int)$db->lastInsertId();
+        }
+        return ['id'=>$id];
+    }
+    public function deleteAnnouncement(int $id): void
+    {
+        if($id<=0) throw new DomainException('Novidade inválida.');
+        $stmt=$this->db()->prepare('DELETE FROM platform_announcements WHERE id=:id');$stmt->execute(['id'=>$id]);
+        if(!$stmt->rowCount()) throw new DomainException('Novidade não encontrada.');
     }
     public function audits(array $filter): array
     {

@@ -13,15 +13,17 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#080908">
+  <meta name="theme-color" content="#111416">
+  <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($appName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260916-slider3">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260917-v12-10-favicon">
 </head>
 <body>
 <div class="mobile-stage">
   <header class="app-header">
     <button class="brand-lockup" data-section="home" aria-label="Início">
+      <img id="header-site-logo" class="header-site-logo hidden" alt="<?= h($appName) ?>" width="166" height="58">
       <span class="brand-round">M</span>
       <span class="brand-text"><b><?= h($appName) ?></b><small>CASINO</small></span>
     </button>
@@ -30,8 +32,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <button class="balance-pill" data-open-auth="register">Criar conta</button>
     </div>
     <div id="user-actions" class="header-actions hidden">
-      <button class="balance-pill" data-section="wallet"><span id="header-balance">R$ 0,00</span></button>
-      <button class="profile-mini" id="user-avatar">U</button>
+      <button class="balance-pill" data-section="profile"><span id="header-balance">R$ 0,00</span></button>
+      <button class="profile-mini" id="user-avatar" type="button" aria-label="Abrir meu perfil" title="Meu perfil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></button>
     </div>
   </header>
 
@@ -42,16 +44,23 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       </section>
       <section id="home-lobby" class="home-lobby" aria-label="Banners do lobby"></section>
 
-      <section class="notice-row">
-        <div class="notice-pill"><span class="notice-dot"></span><b>Novidades e lançamentos MZ90</b></div>
-        <button class="search-square" aria-label="Buscar"><span></span></button>
+      <section class="notice-row" aria-label="Novidades e lançamentos">
+        <div class="notice-pill"><span class="notice-dot"></span><b>Novidades</b></div>
+        <div class="news-window" id="news-window"><div class="news-track" id="news-track"><span>Novidades e lançamentos MZ90</span></div></div>
+        <button class="search-square" id="home-search" aria-label="Buscar jogos" type="button"><span></span></button>
+      </section>
+
+      <section class="providers-section" aria-label="Provedores de jogos">
+        <div class="section-title"><div class="provider-arrows"><button type="button" id="providers-prev" aria-label="Provedores anteriores">‹</button><button type="button" id="providers-next" aria-label="Próximos provedores">›</button></div></div>
+        <div class="provider-scroll" id="provider-scroll"><p class="empty-state">Carregando provedores...</p></div>
       </section>
 
       <section class="category-strip" id="category-row"></section>
 
-      <section class="section-block">
+      <section class="section-block" id="featured-section" hidden>
         <div class="section-title"><h2>Jogos em destaque</h2><button data-section="casino">Ver todos</button></div>
         <div class="game-grid" id="featured-games"></div>
+        <div id="home-provider-groups" class="home-provider-groups"></div>
       </section>
 
       <section class="vip-banner gold-frame">
@@ -63,8 +72,21 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
     <section class="page-section" id="section-casino">
       <div id="casino-managed-banners" class="managed-banners"></div>
       <div class="inner-head"><span>CATÁLOGO</span><h1>Cassino</h1><p>Escolha uma categoria e encontre seu próximo jogo.</p></div>
+      <div class="casino-toolbar"><label class="casino-search-label" for="public-game-search">Buscar jogos<input id="public-game-search" type="search" placeholder="Nome do jogo..." autocomplete="off"></label><button type="button" id="clear-casino-filters" class="dark-btn">Limpar filtros</button></div>
       <section class="category-strip sticky-strip" id="casino-category-row"></section>
+      <div class="casino-filter-summary" id="casino-filter-summary" aria-live="polite"></div>
       <div class="game-grid catalog" id="casino-games"></div>
+    </section>
+
+    <section class="page-section" id="section-game" aria-label="Página do jogo">
+      <button type="button" class="dark-btn game-back" id="game-back">← Voltar ao cassino</button>
+      <article class="game-detail-panel">
+        <div class="game-detail-art" id="game-detail-art"></div>
+        <div class="game-detail-content"><span class="game-detail-eyebrow">JOGO DO CATÁLOGO</span><h1 id="game-detail-name">Jogo</h1><p id="game-detail-provider"></p>
+          <div class="game-availability" role="status">Abertura indisponível até a integração segura do provedor. Não há sessão de aposta ativa.</div>
+          <p class="game-online-placeholder"><span aria-hidden="true" class="online-dot unavailable" id="detail-online-dot"></span> Acessos: <strong id="detail-online-count">—</strong></p>
+        </div>
+      </article>
     </section>
 
     <section class="page-section" id="section-live">
@@ -78,20 +100,49 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <p class="empty-state">As campanhas publicadas aparecem nesta página automaticamente.</p>
     </section>
 
-    <section class="page-section" id="section-wallet">
-      <div class="inner-head"><span>MINHA CONTA</span><h1>Carteira</h1><p>Saldo real alimentado pelo ledger do backend.</p></div>
-      <section class="wallet-balance gold-frame"><small>Saldo disponível</small><strong id="wallet-total">R$ 0,00</strong><div class="wallet-actions"><button class="gold-btn" id="deposit-placeholder">DEPOSITAR</button><button class="dark-btn" id="withdraw-placeholder">SACAR</button></div></section>
-      <section class="wallet-card"><h3>Contas</h3><div id="wallet-accounts" class="account-list"><div class="empty-state">Entre para consultar a carteira.</div></div></section>
-      <section class="wallet-card"><div class="wallet-card-head"><h3>Movimentações</h3><button id="refresh-wallet">Atualizar</button></div><div id="transaction-list" class="transaction-list"><div class="empty-state">Nenhuma movimentação.</div></div></section>
+    <section class="page-section" id="section-profile" aria-label="Meu perfil">
+      <div class="inner-head"><span>MINHA CONTA</span><h1>Meu perfil</h1><p>Dados da conta, saldo e movimentações em um só lugar.</p></div>
+      <article class="profile-panel">
+        <div class="profile-panel-head"><span class="profile-panel-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></span><div><h2 id="profile-display-name">Minha conta</h2><small id="profile-status">Conta ativa</small></div></div>
+        <dl class="profile-details"><div><dt>ID público</dt><dd id="profile-public-id">—</dd></div><div><dt>Telefone</dt><dd id="profile-phone">—</dd></div><div><dt>E-mail</dt><dd id="profile-email">Não cadastrado</dd></div><div><dt>CPF</dt><dd id="profile-cpf">—</dd></div></dl>
+      </article>
+      <section class="profile-wallet-summary gold-frame">
+        <small>Saldo disponível</small><strong id="wallet-total">R$ 0,00</strong>
+        <div class="wallet-actions"><button class="gold-btn" id="deposit-placeholder" type="button">DEPOSITAR</button><button class="dark-btn" id="withdraw-placeholder" type="button">SACAR</button></div>
+      </section>
+      <section class="wallet-card profile-wallet-card"><h3>Carteira</h3><div id="wallet-accounts" class="account-list"><div class="empty-state">Entre para consultar a carteira.</div></div></section>
+      <section class="wallet-card profile-wallet-card"><div class="wallet-card-head"><h3>Movimentações</h3><button id="refresh-wallet" type="button">Atualizar</button></div><div id="transaction-list" class="transaction-list"><div class="empty-state">Nenhuma movimentação.</div></div></section>
+      <div class="profile-actions"><button type="button" class="dark-btn" id="profile-logout">Sair da conta</button></div>
+    </section>
+
+    <section class="page-section" id="section-invite" aria-label="Convide amigos">
+      <div class="inner-head"><span>COMPARTILHE</span><h1>Convidar</h1><p>Um atalho para divulgar a plataforma e convidar novos jogadores.</p></div>
+      <article class="profile-panel invite-panel">
+        <div class="profile-panel-head"><span class="profile-panel-avatar" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span><div><h2>Convide seus amigos</h2><small>Visual profissional com ícone dedicado no menu inferior</small></div></div>
+        <p class="empty-state">Compartilhe sua plataforma com seu público. Esta área pode receber regras e benefícios do programa de indicação quando desejar.</p>
+        <div class="profile-actions"><button type="button" class="gold-btn" data-section="home">Voltar para a home</button><button type="button" class="dark-btn" data-section="promotions">Ver promoções</button></div>
+      </article>
     </section>
   </main>
 
+  <footer id="platform-footer" class="platform-footer" aria-label="Rodapé da plataforma">
+    <div class="footer-content">
+      <div class="footer-brand"><img id="footer-logo" class="footer-logo hidden" alt="Logo da plataforma"><strong id="footer-brand-name"><?= h($appName) ?></strong></div>
+      <p id="footer-about" class="footer-about"></p>
+      <div class="footer-contact-grid">
+        <section class="footer-contact-section"><strong>Fale conosco</strong><div id="footer-contact" class="footer-links" aria-label="Canais de atendimento"></div><div id="footer-socials" class="footer-socials" aria-label="Redes sociais oficiais"></div></section>
+        <section class="footer-info-section"><strong>Informações</strong><p><span class="footer-age" aria-label="Maiores de 18 anos">18+</span> Jogue com responsabilidade.</p></section>
+      </div>
+      <div class="footer-bottom"><div id="footer-copy" aria-label="Direitos autorais"><span>© <?= date('Y') ?> <?= h($appName) ?>.</span><span>Todos os direitos reservados.</span></div></div>
+    </div>
+  </footer>
+
   <nav class="bottom-nav" aria-label="Navegação principal">
-    <button class="bottom-item active" data-section="home"><i></i><span>Início</span></button>
-    <button class="bottom-item" data-section="promotions"><i></i><span>Promoção</span></button>
-    <button class="bottom-item center" data-section="casino"><b>M</b><span>MZ90</span></button>
-    <button class="bottom-item" data-section="wallet"><i></i><span>Depósito</span></button>
-    <button class="bottom-item" id="profile-nav"><i></i><span>Perfil</span></button>
+    <button class="bottom-item active" data-section="home"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></i><span id="home-nav-label">Início</span></button>
+    <button class="bottom-item" data-section="promotions"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l-1 6h3l-6 10 1-7H6l1-9Z"/></svg></i><span>Promoção</span></button>
+    <button class="bottom-item center" id="deposit-nav" type="button"><i aria-hidden="true" class="bottom-center-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a3 3 0 0 1 3-3h11l4 4v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z"/><path d="M3 9h18"/><path d="M15 14h3"/></svg></i><span>Depósito</span></button>
+    <button class="bottom-item" data-section="invite"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8h4"/><path d="M19 6v4"/></svg></i><span>Convidar</span></button>
+    <button class="bottom-item" id="profile-nav"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></i><span>Perfil</span></button>
   </nav>
 </div>
 
@@ -127,10 +178,10 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   </div>
 </div>
 
-<footer id="platform-footer" class="platform-footer"></footer>
+
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$appName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260916-slider3"></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260917-v12-10-favicon"></script>
 </body>
 </html>

@@ -1,6 +1,10 @@
 const $=(s,r=document)=>r.querySelector(s); const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const tokenKey='igaming_admin_token'; let token=localStorage.getItem(tokenKey)||''; let usersPage=1; let usersPages=1; let currentUserId=''; let financePage=1; let financePages=1;
 async function api(path,options={}){const headers={'Content-Type':'application/json',...(options.headers||{})};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch(path,{...options,headers});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.message||data.error||`HTTP ${r.status}`);return data}
+
+function setAdminBrowserFavicon(path){const link=document.getElementById('browser-favicon')||document.createElement('link');link.id='browser-favicon';link.rel='icon';if(!link.parentNode)document.head.append(link);const value=String(path||'').trim();if(!/^\/uploads\/identity\/[a-z0-9_-]+\.(?:png|jpg|webp)$/i.test(value)){link.href='data:,';return}const ext=value.split('.').pop().toLowerCase();link.type=ext==='png'?'image/png':ext==='webp'?'image/webp':'image/jpeg';link.href=value}
+async function syncPublicFavicon(){try{const response=await fetch('/api/platform/public',{headers:{Accept:'application/json'}});if(!response.ok)return;const data=await response.json();setAdminBrowserFavicon(data.settings?.favicon_path)}catch{}}
+syncPublicFavicon();
 function alertBox(id,msg,ok=false){const e=$(id);e.textContent=msg;e.classList.remove('hidden','ok');if(ok)e.classList.add('ok');if(!ok){const overlay=document.querySelector('.admin-editor-overlay:not(.hidden)');if(overlay){const err=overlay.querySelector('.admin-editor-error');err.textContent=msg;err.classList.remove('hidden')}}}
 function money(minor){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(minor)||0)/100)}
 function shortId(id){return String(id||'').split('-')[0]||'—'}
@@ -13,7 +17,7 @@ let editorReturnFocus=null;
 function openEditor(formId,editing=false){
  const overlay=document.getElementById('editor-'+formId);if(!overlay)return;
  editorReturnFocus=document.activeElement;
- const label={'casino-provider-form':'provedor','casino-game-form':'jogo','banners-form':'banner','promotions-form':'promoção','affiliates-form':'link de indicação'}[formId]||'registro';
+ const label={'casino-provider-form':'provedor','casino-category-form':'categoria','casino-game-form':'jogo','banners-form':'banner','promotions-form':'promoção','affiliates-form':'link de indicação','announcements-form':'novidade'}[formId]||'registro';
  overlay.querySelector('h2').textContent=(editing?'Editar ':'Novo ')+label;
  overlay.querySelector('.admin-editor-error').classList.add('hidden');
  if(overlay._closeTimer){clearTimeout(overlay._closeTimer);overlay._closeTimer=null;}
@@ -38,11 +42,13 @@ for(const overlay of document.querySelectorAll('.admin-editor-overlay')){
  overlay.addEventListener('click',e=>{if(e.target===overlay)closeEditor(id)});
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const overlay=document.querySelector('.admin-editor-overlay:not(.hidden)');if(overlay)closeEditor(overlay.id.slice('editor-'.length))}});
-function newEditor(formId){const f=document.getElementById(formId);f.reset();f.elements.id.value='';if(formId==='casino-provider-form')f.elements.code.readOnly=false;if(formId==='banners-form'){f.elements.image_path.value='';f.elements.position.value=document.querySelector('[data-banner-filter].active')?.dataset.bannerFilter||'home'}openEditor(formId,false)}
+function newEditor(formId){const f=document.getElementById(formId);f.reset();f.elements.id.value='';if(formId==='casino-provider-form'){f.elements.code.readOnly=false;f.elements.logo_path.value='';f.elements.logo_file.value='';$('#provider-logo-preview').classList.add('hidden')}if(formId==='casino-category-form'){f.elements.code.readOnly=false;f.elements.sort_order.value='100';f.elements.enabled.checked=true}if(formId==='casino-game-form' && f.elements.access_count)f.elements.access_count.value='250';if(formId==='banners-form'){f.elements.image_path.value='';f.elements.position.value=document.querySelector('[data-banner-filter].active')?.dataset.bannerFilter||'home'}openEditor(formId,false)}
 document.getElementById('new-provider').addEventListener('click',()=>newEditor('casino-provider-form'));
+document.getElementById('new-category').addEventListener('click',()=>newEditor('casino-category-form'));
 document.getElementById('new-game').addEventListener('click',()=>newEditor('casino-game-form'));
 document.getElementById('new-promotion').addEventListener('click',()=>newEditor('promotions-form'));
 document.getElementById('new-affiliate').addEventListener('click',()=>newEditor('affiliates-form'));
+document.getElementById('new-announcement').addEventListener('click',()=>newEditor('announcements-form'));
 async function boot(){
  if(!token)return showLogin();
  try{
@@ -142,12 +148,13 @@ function renderGateway(g){const node=$('#gateway-template').content.firstElement
 async function saveGateway(node,code){const q=n=>$(`[name=${n}]`,node);const payload={code,name:q('name').value,enabled:q('enabled').checked,deposit_enabled:q('deposit_enabled').checked,withdrawal_enabled:q('withdrawal_enabled').checked,mode:q('mode').value,priority_deposit:Number(q('priority_deposit').value||100),priority_withdrawal:Number(q('priority_withdrawal').value||100),min_deposit_minor:moneyToMinor(q('min_deposit').value)||0,max_deposit_minor:moneyToMinor(q('max_deposit').value),min_withdrawal_minor:moneyToMinor(q('min_withdrawal').value)||0,max_withdrawal_minor:moneyToMinor(q('max_withdrawal').value),credentials:{},settings:{}};if(code==='pixup'){payload.credentials={client_id:q('client_id').value,client_secret:q('client_secret').value,webhook_secret:q('webhook_secret').value};payload.settings={base_url:q('base_url').value,webhook_url:q('webhook_url').value,verify_webhook_signature:q('verify_webhook_signature').checked}}try{await api('/admin/api/gateways/save',{method:'POST',body:JSON.stringify(payload)});alertBox('#save-alert',`Gateway ${code} salvo.`,true);await loadGateways()}catch(e){alertBox('#save-alert',e.message)}}
 boot();
 
-let casinoCatalog={providers:[],games:[]};
+let casinoCatalog={providers:[],categories:[],games:[]};
 let casinoGamePage=1;
 const casinoApiLabel=source=>source==='PLAYFIVER'?'PlayFiver':'Catálogo local';
 function casinoGameForm(v){
  const f=$('#casino-game-form');
- for(const key of ['id','provider_id','external_id','name','category','image_url','sort_order'])f.elements[key].value=v[key]??'';
+ for(const key of ['id','provider_id','external_id','name','category','image_url','sort_order','access_count'])f.elements[key].value=v[key]??'';
+ f.elements.access_count.value=v.access_count??250;
  f.elements.enabled.checked=!!Number(v.enabled);
  f.elements.featured.checked=!!Number(v.featured);
  openEditor('casino-game-form',true);
@@ -195,6 +202,7 @@ function renderCasinoGames(){
    const title=cell(game.name,'game-api-name');title.title=game.name;
    cell(game.external_id,'game-api-code');cell(game.provider_name,'game-api-provider');
    const apiCell=cell(casinoApiLabel(game.api_source),'game-api-source');apiCell.classList.add(game.api_source==='PLAYFIVER'?'is-playfiver':'is-manual');
+   cell(Number(game.access_count||0).toLocaleString('pt-BR'),'game-api-access');
    const status=document.createElement('td');status.append(gameToggle(game,'enabled','Ativar jogo'));tr.append(status);
    const popular=document.createElement('td');popular.append(gameToggle(game,'featured','Marcar como popular'));tr.append(popular);
    const actions=document.createElement('td');actions.className='game-api-actions';
@@ -208,7 +216,7 @@ function renderCasinoGames(){
    });
    actions.append(edit,del);tr.append(actions);body.append(tr);
  }
- if(!items.length){const row=document.createElement('tr');row.innerHTML='<td class="game-api-empty" colspan="8">Nenhum jogo encontrado com os filtros selecionados.</td>';body.append(row)}
+ if(!items.length){const row=document.createElement('tr');row.innerHTML='<td class="game-api-empty" colspan="9">Nenhum jogo encontrado com os filtros selecionados.</td>';body.append(row)}
  $('#casino-games-count').textContent=items.length?`Mostrando ${start+1} a ${Math.min(start+pageSize,items.length)} de ${items.length} jogos`:'Nenhum jogo encontrado';
  $('#casino-games-page').textContent=`Página ${casinoGamePage} de ${pages}`;
  $('#casino-games-prev').disabled=casinoGamePage<=1;
@@ -217,42 +225,77 @@ function renderCasinoGames(){
 async function loadCasino(){
  try{
    casinoCatalog=await api('/admin/api/casino/catalog');
-   const p=$('#casino-providers-body'),select=$('#casino-provider-select');p.replaceChildren();select.replaceChildren();
+   const p=$('#casino-providers-body'),select=$('#casino-provider-select'),categorySelect=$('#casino-game-form [name=category]'),categoryBody=$('#casino-categories-body');p.replaceChildren();select.replaceChildren();categorySelect.replaceChildren();categoryBody.replaceChildren();
+   const iconLabels={slots:'Slots',fish:'Pescaria',sport:'SportBet',roulette:'Roleta',live:'Ao vivo',table:'Mesa',other:'Outro'};
+   (casinoCatalog.categories||[]).sort((a,b)=>Number(a.sort_order)-Number(b.sort_order)||Number(a.id)-Number(b.id)).forEach(v=>{
+     categorySelect.add(new Option(v.name,v.code));
+     const tr=document.createElement('tr');
+     tr.innerHTML=`<td><code>${escapeHtml(v.code)}</code></td><td>${escapeHtml(v.name)}</td><td>${escapeHtml(iconLabels[v.icon_key]||v.icon_key)}</td><td>${Number(v.sort_order)}</td><td>${Number(v.enabled)?'Ativa':'Inativa'}</td><td class="provider-row-actions"><button class="secondary-action category-edit" type="button">Editar</button><button class="danger-button category-delete" type="button">Excluir</button></td>`;
+     tr.querySelector('.category-edit').onclick=()=>{const f=$('#casino-category-form');f.elements.id.value=v.id;f.elements.code.value=v.code;f.elements.code.readOnly=true;f.elements.name.value=v.name;f.elements.icon_key.value=v.icon_key||'slots';f.elements.sort_order.value=v.sort_order;f.elements.enabled.checked=!!Number(v.enabled);openEditor('casino-category-form',true)};
+     tr.querySelector('.category-delete').onclick=async()=>{if(!confirm(`Excluir a categoria “${v.name}”? Só é permitido quando não existem jogos vinculados.`))return;const button=tr.querySelector('.category-delete');button.disabled=true;try{await api('/admin/api/casino/categories/delete',{method:'POST',body:JSON.stringify({id:v.id})});await loadCasino();alertBox('#casino-alert','Categoria excluída.',true)}catch(error){alertBox('#casino-alert',error.message);button.disabled=false}};
+     categoryBody.append(tr);
+   });
+   if(!(casinoCatalog.categories||[]).length){categoryBody.innerHTML='<tr><td colspan="6">Nenhuma categoria cadastrada.</td></tr>';categorySelect.add(new Option('Slots','SLOTS'))}
    casinoCatalog.providers.forEach(v=>{
      select.add(new Option(v.name,v.id));
      const tr=document.createElement('tr');
-     tr.innerHTML=`<td>${escapeHtml(v.code)}</td><td>${escapeHtml(v.name)}</td><td>${escapeHtml(v.mode)}</td><td>${escapeHtml(casinoApiLabel(v.api_source))}</td><td>${v.enabled?'Ativo':'Inativo'}</td><td><button class="secondary-action casino-edit" type="button">Editar</button></td>`;
-     tr.querySelector('button').onclick=()=>{
+     tr.innerHTML=`<td class="provider-admin-logo">${v.logo_path?`<img src="${escapeHtml(v.logo_path)}" alt="" width="150" height="60">`:'<span>—</span>'}</td><td>${escapeHtml(v.code)}</td><td>${escapeHtml(v.name)}</td><td>${escapeHtml(v.mode)}</td><td>${escapeHtml(casinoApiLabel(v.api_source))}</td><td>${v.enabled?'Ativo':'Inativo'}</td><td class="provider-row-actions"><button class="secondary-action casino-edit" type="button">Editar</button><button class="danger-button provider-delete" type="button" aria-label="Excluir provedor ${escapeHtml(v.name)}">Excluir</button></td>`;
+     tr.querySelector('.casino-edit').onclick=()=>{
        const f=$('#casino-provider-form');f.elements.id.value=v.id;f.elements.code.value=v.code;f.elements.code.readOnly=true;
-       f.elements.name.value=v.name;f.elements.mode.value=v.mode;f.elements.api_source.value=v.api_source||'MANUAL';
+       f.elements.name.value=v.name;f.elements.logo_path.value=v.logo_path||'';f.elements.logo_file.value='';const preview=$('#provider-logo-preview');preview.classList.toggle('hidden',!v.logo_path);if(v.logo_path)preview.src=v.logo_path;f.elements.mode.value=v.mode;f.elements.api_source.value=v.api_source||'MANUAL';
        f.elements.enabled.checked=!!Number(v.enabled);openEditor('casino-provider-form',true);
-     };p.append(tr);
+     };
+     tr.querySelector('.provider-delete').onclick=async()=>{
+       if(!confirm(`Excluir o provedor “${v.name}”? Esta ação é definitiva e só será permitida se não houver jogos vinculados.`))return;
+       const button=tr.querySelector('.provider-delete');button.disabled=true;
+       try{await api('/admin/api/casino/providers/delete',{method:'POST',body:JSON.stringify({id:v.id})});await loadCasino();alertBox('#casino-alert','Provedor excluído.',true)}
+       catch(error){alertBox('#casino-alert',error.message);button.disabled=false}
+     };
+     p.append(tr);
    });
-   if(!casinoCatalog.providers.length)p.innerHTML='<tr><td colspan="6">Nenhum provedor cadastrado.</td></tr>';
+   if(!casinoCatalog.providers.length)p.innerHTML='<tr><td colspan="7">Nenhum provedor cadastrado.</td></tr>';
    casinoGameOptions();renderCasinoGames();
  }catch(error){alertBox('#casino-alert',error.message)}
 }
 $('#casino-refresh').addEventListener('click',loadCasino);
+$('#sync-playfiver')?.addEventListener('click',async()=>{
+ const button=$('#sync-playfiver');const status=$('#playfiver-sync-status');
+ if(!confirm('Sincronizar agora todos os provedores e jogos publicados pela PlayFiver? As logos cadastradas manualmente serão preservadas.'))return;
+ button.disabled=true;const previous=button.textContent;button.textContent='↻ Sincronizando...';if(status)status.textContent='Consultando provedores e jogos da PlayFiver. Isso pode levar alguns segundos.';
+ try{
+   const result=await api('/admin/api/casino/playfiver/sync',{method:'POST',body:'{}'});const sync=result.sync||{};
+   await loadCasino();
+   const message=`PlayFiver sincronizada: ${Number(sync.providers_synced||0).toLocaleString('pt-BR')} provedores e ${Number(sync.games_synced||0).toLocaleString('pt-BR')} jogos.`;
+   if(status)status.textContent=message+(Number(sync.games_skipped||0)?` ${sync.games_skipped} item(ns) ignorado(s) por dados incompletos.`:'');
+   alertBox('#casino-alert',message,true);
+ }catch(error){if(status)status.textContent='Falha na sincronização: '+error.message;alertBox('#casino-alert',error.message)}
+ finally{button.disabled=false;button.textContent=previous}
+});
 $('#casino-game-filters').addEventListener('submit',event=>{event.preventDefault();casinoGamePage=1;renderCasinoGames()});
 $('#casino-game-search').addEventListener('input',()=>{casinoGamePage=1;renderCasinoGames()});
 for(const id of ['casino-game-api-filter','casino-game-provider-filter','casino-games-limit'])$('#'+id).addEventListener('change',()=>{casinoGamePage=1;renderCasinoGames()});
 $('#casino-games-prev').addEventListener('click',()=>{casinoGamePage--;renderCasinoGames()});
 $('#casino-games-next').addEventListener('click',()=>{casinoGamePage++;renderCasinoGames()});
+$('#casino-category-form').addEventListener('reset',e=>setTimeout(()=>{e.currentTarget.elements.code.readOnly=false;e.currentTarget.elements.sort_order.value='100';e.currentTarget.elements.enabled.checked=true},0));
+$('#casino-category-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));d.code=String(d.code||'').trim().toUpperCase();d.enabled=f.elements.enabled.checked;const submit=f.querySelector('[type=submit]');submit.disabled=true;try{await api('/admin/api/casino/categories/save',{method:'POST',body:JSON.stringify(d)});f.reset();closeEditor('casino-category-form');await loadCasino();alertBox('#casino-alert','Categoria salva.',true)}catch(err){alertBox('#casino-alert',err.message)}finally{submit.disabled=false}});
 $('#casino-provider-form').addEventListener('reset',e=>setTimeout(()=>e.currentTarget.elements.code.readOnly=false,0));
-$('#casino-provider-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));d.enabled=f.elements.enabled.checked;try{await api('/admin/api/casino/providers/save',{method:'POST',body:JSON.stringify(d)});f.reset();f.elements.code.readOnly=false;closeEditor('casino-provider-form');await loadCasino();alertBox('#casino-alert','Provedor salvo.',true)}catch(err){alertBox('#casino-alert',err.message)}});
-$('#casino-game-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));d.enabled=f.elements.enabled.checked;d.featured=f.elements.featured.checked;try{await api('/admin/api/casino/games/save',{method:'POST',body:JSON.stringify(d)});f.reset();closeEditor('casino-game-form');await loadCasino();alertBox('#casino-alert','Jogo salvo.',true)}catch(err){alertBox('#casino-alert',err.message)}});
+$('#casino-provider-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));delete d.logo_file;d.enabled=f.elements.enabled.checked;const submit=f.querySelector('[type=submit]');submit.disabled=true;try{const file=f.elements.logo_file.files[0];if(file){if(file.size>2097152)throw new Error('Logo deve ter até 2 MB.');const fd=new FormData();fd.append('kind','providers');fd.append('image',file);const response=await fetch('/admin/api/platform/upload',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:fd});const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.message||data.error||'Falha no upload da logo');d.logo_path=data.path;}await api('/admin/api/casino/providers/save',{method:'POST',body:JSON.stringify(d)});f.reset();f.elements.code.readOnly=false;closeEditor('casino-provider-form');await loadCasino();alertBox('#casino-alert','Provedor salvo.',true)}catch(err){alertBox('#casino-alert',err.message)}finally{submit.disabled=false}});
+$('#casino-game-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,d=Object.fromEntries(new FormData(f));d.enabled=f.elements.enabled.checked;d.featured=f.elements.featured.checked;d.access_count=Number(f.elements.access_count.value||0);try{await api('/admin/api/casino/games/save',{method:'POST',body:JSON.stringify(d)});f.reset();f.elements.access_count.value='250';closeEditor('casino-game-form');await loadCasino();alertBox('#casino-alert','Jogo salvo.',true)}catch(err){alertBox('#casino-alert',err.message)}});
 
 // Navegação do cassino: seções reais ativas; recursos que dependem de APIs permanecem indisponíveis.
 (() => {
  const tabs=[...document.querySelectorAll('[data-casino-tab]:not(:disabled)')];
  const parent=document.querySelector('.casino-nav-parent');
  const group=document.querySelector('.casino-nav-group');
- const choose=tab=>{
+ const choose=(tab,expand=true)=>{
    tabs.forEach(b=>b.classList.toggle('active',b.dataset.casinoTab===tab));
-   setHeading('PLATAFORMA',tab==='providers'?'Provedores':tab==='credentials'?'Credenciais das APIs':'Gerenciamento de Jogos API',tab==='providers'?'Gerencie os provedores cadastrados.':tab==='credentials'?'Credenciais armazenadas com criptografia; abertura de jogos pendente.':'Busca, filtros e visibilidade do catálogo.');
-   document.querySelectorAll('.casino-panel').forEach(p=>p.classList.toggle('hidden',p.id!==(tab==='providers'?'casino-providers-panel':tab==='credentials'?'casino-credentials-panel':'casino-games-panel')));
-   if(group)group.classList.remove('collapsed');
-   if(parent)parent.setAttribute('aria-expanded','true');
+   const title=tab==='providers'?'Provedores':tab==='categories'?'Categorias de jogos':tab==='credentials'?'Credenciais das APIs':'Gerenciamento de Jogos API';
+   const description=tab==='providers'?'Gerencie os provedores cadastrados.':tab==='categories'?'Organize Slots, Pescaria, SportBet, Roleta e outras categorias.':tab==='credentials'?'Credenciais armazenadas com criptografia; abertura de jogos pendente.':'Busca, filtros e visibilidade do catálogo.';
+   if(!document.querySelector('#page-casino').classList.contains('hidden')) setHeading('PLATAFORMA',title,description);
+   const panelId=tab==='providers'?'casino-providers-panel':tab==='categories'?'casino-categories-panel':tab==='credentials'?'casino-credentials-panel':'casino-games-panel';
+   document.querySelectorAll('.casino-panel').forEach(p=>p.classList.toggle('hidden',p.id!==panelId));
+   if(expand && group)group.classList.remove('collapsed');
+   if(parent && expand)parent.setAttribute('aria-expanded','true');
  };
  tabs.forEach(b=>b.addEventListener('click',async()=>{document.querySelector('.nav-item[data-page="casino"]')?.click();choose(b.dataset.casinoTab)}));
  parent?.addEventListener('click',e=>{
@@ -261,7 +304,7 @@ $('#casino-game-form').addEventListener('submit',async e=>{e.preventDefault();co
    parent.setAttribute('aria-expanded',collapsed?'false':'true');
    if(!collapsed){ openPage('casino'); }
  });
- choose('games');
+ choose('games',false);
 })();
 
 async function loadPlayfiverConfig(){try{const d=await api('/admin/api/casino/playfiver');const c=d.config;$('#playfiver-form').elements.base_url.value=c.base_url;$('#playfiver-status').textContent=c.configured?'Credenciais armazenadas · Integração desativada':'Credenciais não configuradas';}catch(e){alertBox('#playfiver-alert',e.message)}}
@@ -270,7 +313,27 @@ document.querySelector('[data-casino-tab="credentials"]').addEventListener('clic
 
 // Plataforma: controles administrativos autenticados, sem mutação de saldo.
 let platformData={};let auditPage=1;
-async function loadPlatform(){try{platformData=await api('/admin/api/platform');const f=$('#settings-form');for(const [k,v] of Object.entries(platformData.settings)){if(!f.elements[k])continue;if(k==='maintenance')f.elements[k].checked=v==='1';else f.elements[k].value=v;}for(const type of ['banners','promotions','affiliates'])renderPlatform(type);populateIdentity()}catch(e){alertBox('#settings-alert',e.message)}}
+async function loadPlatform(){try{platformData=await api('/admin/api/platform');setAdminBrowserFavicon(platformData.settings?.favicon_path);const f=$('#settings-form');for(const [k,v] of Object.entries(platformData.settings)){if(!f.elements[k])continue;if(k==='maintenance')f.elements[k].checked=v==='1';else f.elements[k].value=v;}for(const type of ['banners','promotions','affiliates'])renderPlatform(type);renderAnnouncements();populateIdentity()}catch(e){alertBox('#settings-alert',e.message)}}
+function renderAnnouncements(){
+ const host=$('#announcements-list');host.replaceChildren();
+ const rows=platformData.announcements||[];
+ if(!rows.length){host.innerHTML='<p class="appearance-empty">Nenhuma novidade cadastrada. Use “Nova novidade” para publicar um texto na home.</p>';return;}
+ for(const item of rows){
+   const row=document.createElement('div');row.className='platform-row announcement-admin-row';
+   const info=document.createElement('div');info.className='promotion-info';
+   const title=document.createElement('strong');title.textContent=item.message;
+   const details=document.createElement('small');details.textContent=(Number(item.enabled)?'Publicada':'Desativada')+' · Ordem '+item.sort_order;
+   info.append(title,details);row.append(info);
+   const edit=document.createElement('button');edit.className='secondary';edit.type='button';edit.textContent='Editar';edit.onclick=()=>{const f=$('#announcements-form');f.elements.id.value=item.id;f.elements.message.value=item.message;f.elements.sort_order.value=item.sort_order;f.elements.enabled.checked=!!Number(item.enabled);openEditor('announcements-form',true)};
+   const toggle=document.createElement('button');toggle.className='secondary';toggle.type='button';toggle.textContent=Number(item.enabled)?'Desativar':'Ativar';toggle.onclick=async()=>{toggle.disabled=true;try{await api('/admin/api/platform/announcements/save',{method:'POST',body:JSON.stringify({...item,enabled:!Number(item.enabled)})});await loadPlatform();alertBox('#announcements-alert','Novidade atualizada.',true)}catch(e){alertBox('#announcements-alert',e.message);toggle.disabled=false}};
+   const del=document.createElement('button');del.className='danger-button';del.type='button';del.textContent='Excluir';del.onclick=async()=>{if(!confirm('Excluir esta novidade?'))return;try{await api('/admin/api/platform/announcements/delete',{method:'POST',body:JSON.stringify({id:item.id})});await loadPlatform();alertBox('#announcements-alert','Novidade excluída.',true)}catch(e){alertBox('#announcements-alert',e.message)}};
+   row.append(edit,toggle,del);host.append(row);
+ }
+}
+$('#announcements-form').addEventListener('submit',async e=>{
+ e.preventDefault();const f=e.currentTarget;const d=Object.fromEntries(new FormData(f));d.enabled=f.elements.enabled.checked;const button=f.querySelector('[type=submit]');button.disabled=true;
+ try{await api('/admin/api/platform/announcements/save',{method:'POST',body:JSON.stringify(d)});closeEditor('announcements-form');f.reset();await loadPlatform();alertBox('#announcements-alert','Novidade salva.',true)}catch(error){alertBox('#announcements-alert',error.message)}finally{button.disabled=false}
+});
 async function deletePlatformBanner(item){
  if(!confirm(`Excluir o banner “${item.title}”? Esta ação não pode ser desfeita.`))return;
  try{await api('/admin/api/platform/banners/delete',{method:'POST',body:JSON.stringify({id:item.id})});await loadPlatform();alertBox('#banners-alert','Banner excluído.',true)}
@@ -321,8 +384,8 @@ function renderPlatform(type){
  }
 }
 function editPlatformItem(type,item){const form=$('#'+type+'-form');for(const [key,value] of Object.entries(item)){const el=form.elements[key];if(!el||el.type==='file')continue;if(el.type==='checkbox')el.checked=!!Number(value);else el.value=value??'';}if(type==='banners'){$('#banner-form-title').textContent='Banners da plataforma';$('#banner-modal-size-guide').textContent=item.position==='casino'?'Lobby: esquerda 900 × 900 px; direita 900 × 430 px; até 2 MB.':'Carrossel: recomendado 1920 × 600 px; até 2 MB.';}openEditor(type+'-form',true)}
-function populateIdentity(){const f=$('#identity-form');if(!f||!platformData.settings)return;for(const k of ['site_name','support_email','accent_color','footer_text','logo_path','favicon_path'])if(f.elements[k])f.elements[k].value=platformData.settings[k]||'';f.elements.maintenance.checked=platformData.settings.maintenance==='1';for(const kind of ['logo','favicon']){const img=$('#identity-'+kind+'-preview');const path=f.elements[kind+'_path'].value;img.classList.toggle('hidden',!path);if(path)img.src=path;}}
-$('#identity-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const submit=f.querySelector('[type="submit"]');submit.disabled=true;try{const payload={};for(const k of ['site_name','support_email','accent_color','footer_text','logo_path','favicon_path'])payload[k]=f.elements[k].value;payload.maintenance=f.elements.maintenance.checked;for(const kind of ['logo','favicon']){const file=f.elements[kind+'_file'].files[0];if(!file)continue;const fd=new FormData();fd.append('kind','identity');fd.append('image',file);const response=await fetch('/admin/api/platform/upload',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:fd});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||'Falha no upload');payload[kind+'_path']=data.path;}await api('/admin/api/platform/settings',{method:'POST',body:JSON.stringify(payload)});await loadPlatform();f.elements.logo_file.value='';f.elements.favicon_file.value='';alertBox('#identity-alert','Identidade visual salva.',true)}catch(err){alertBox('#identity-alert',err.message)}finally{submit.disabled=false}});
+function populateIdentity(){const f=$('#identity-form');if(!f||!platformData.settings)return;for(const k of ['site_name','support_email','accent_color','logo_path','favicon_path','footer_about','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook'])if(f.elements[k])f.elements[k].value=platformData.settings[k]||(k==='footer_about'?`Conheça a ${platformData.settings.site_name||'MZ90'}: entretenimento online com responsabilidade. Plataforma destinada a maiores de 18 anos.`:'');f.elements.maintenance.checked=platformData.settings.maintenance==='1';for(const kind of ['logo','favicon']){const img=$('#identity-'+kind+'-preview');const path=f.elements[kind+'_path'].value;img.classList.toggle('hidden',!path);if(path)img.src=path;}}
+$('#identity-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const submit=f.querySelector('[type="submit"]');submit.disabled=true;try{const payload={};for(const k of ['site_name','support_email','accent_color','logo_path','favicon_path','footer_about','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook'])payload[k]=f.elements[k].value;payload.maintenance=f.elements.maintenance.checked;for(const kind of ['logo','favicon']){const file=f.elements[kind+'_file'].files[0];if(!file)continue;const fd=new FormData();fd.append('kind','identity');fd.append('image',file);const response=await fetch('/admin/api/platform/upload',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:fd});const data=await response.json();if(!response.ok)throw new Error(data.message||data.error||'Falha no upload');payload[kind+'_path']=data.path;}await api('/admin/api/platform/settings',{method:'POST',body:JSON.stringify(payload)});await loadPlatform();f.elements.logo_file.value='';f.elements.favicon_file.value='';alertBox('#identity-alert','Identidade visual salva.',true)}catch(err){alertBox('#identity-alert',err.message)}finally{submit.disabled=false}});
 $('#settings-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const d=Object.fromEntries(new FormData(f));d.maintenance=f.elements.maintenance.checked;try{await api('/admin/api/platform/settings',{method:'POST',body:JSON.stringify(d)});alertBox('#settings-alert','Configurações salvas.',true)}catch(err){alertBox('#settings-alert',err.message)}});
 for(const type of ['banners','promotions','affiliates']){$('#'+type+'-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget;const d=Object.fromEntries(new FormData(f));d.enabled=f.elements.enabled.checked;try{const file=f.elements.image?.files?.[0];if(file){const fd=new FormData();fd.append('kind',type);fd.append('image',file);const r=await fetch('/admin/api/platform/upload',{method:'POST',headers:{Authorization:`Bearer ${token}`},body:fd});const out=await r.json();if(!r.ok)throw new Error(out.message||out.error||'Upload falhou');d.image_path=out.path;}await api('/admin/api/platform/'+type+'/save',{method:'POST',body:JSON.stringify(d)});f.reset();closeEditor(type+'-form');await loadPlatform();alertBox('#'+type+'-alert','Registro salvo.',true)}catch(err){alertBox('#'+type+'-alert',err.message);const overlay=$('#editor-'+type+'-form');const error=overlay?.querySelector('.admin-editor-error');if(error){error.textContent=err.message;error.classList.remove('hidden')}}});}
 async function loadAudit(){try{const q=encodeURIComponent($('#audit-search').value);const data=await api(`/admin/api/platform/audit?page=${auditPage}&action=${q}`);const body=$('#audit-body');body.replaceChildren();for(const item of data.items){const tr=document.createElement('tr');for(const value of [dateTime(item.created_at),item.actor_type+' · '+shortId(item.actor_id),item.action,(item.entity_type||'—')+' · '+(item.entity_id||'—')]){const td=document.createElement('td');td.textContent=value;tr.append(td)}body.append(tr)}$('#audit-page').textContent='Página '+auditPage;$('#audit-next').disabled=data.items.length<30}catch(e){console.error('Falha ao carregar auditoria')}}

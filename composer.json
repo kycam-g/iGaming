@@ -20,6 +20,7 @@
         "setup": "php bin/setup.php",
         "migrate": "php bin/migrate.php",
         "test": "php bin/test.php",
-        "admin:create": "php bin/create-admin.php"
+        "admin:create": "php bin/create-admin.php",
+        "casino:sync-playfiver": "php bin/sync-playfiver.php"
     }
 }

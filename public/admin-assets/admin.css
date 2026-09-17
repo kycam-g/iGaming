@@ -277,3 +277,59 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
   .admin-profile-avatar{flex-basis:34px!important;width:34px!important;height:34px!important}
   .admin-shell.login-mode > main{padding:16px!important}
 }
+
+/* V12: logos reais de provedores, novidades e personalização do rodapé. */
+.provider-admin-logo{width:172px!important;min-width:172px}.provider-admin-logo img,.provider-logo-preview{display:block;width:150px!important;height:60px!important;max-width:150px;max-height:60px;object-fit:contain;border-radius:10px;background:#24272c;padding:6px}
+.provider-upload-label{display:grid;gap:7px}.provider-upload-label input{max-width:100%;min-width:0}.provider-upload-label small{display:block;color:#aeb4bb;font-size:11px;line-height:1.45}
+.provider-logo-preview.hidden{display:none!important}
+.footer-editor{margin-top:24px;border-top:1px solid #373d43;padding-top:22px}.footer-editor h3{margin:0 0 6px;color:#fff;font-size:18px}.footer-editor .hint{color:#a6afb6;line-height:1.5}
+.footer-editor-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:16px}.footer-editor-grid label{display:grid;gap:7px;min-width:0;color:#f0e7e5;font-weight:700;font-size:12px}
+.footer-editor-grid input,.footer-editor-grid textarea{display:block;max-width:100%;width:100%;min-width:0;min-height:44px;background:#191e22;color:#fff;border:1px solid #394147;border-radius:9px;padding:10px;resize:vertical;font-family:inherit}
+.footer-editor-grid label:first-child{grid-column:1/-1}.announcement-admin-row{align-items:center;gap:10px}.announcement-admin-row .promotion-info{flex:1;min-width:170px}.announcement-admin-row .promotion-info strong{display:block;white-space:normal;overflow-wrap:anywhere}
+@media(max-width:780px){.footer-editor-grid{grid-template-columns:1fr}.announcement-admin-row{flex-wrap:wrap}.announcement-admin-row .promotion-info{flex:1 0 100%}}
+
+/* V12.2 — ações de provedor sem alterar a navegação. */
+.provider-row-actions{white-space:nowrap;min-width:160px}.provider-row-actions button{margin:2px 4px 2px 0}.provider-row-actions .provider-delete{padding:9px 13px}.footer-editor-grid label small{font-size:11px;font-weight:400;color:#aeb4bb;line-height:1.5}
+
+/* V12.4 — um único scroll da página no desktop; sem barra interna no menu lateral.
+   No celular, menu móvel continua rolável quando necessário, mas sem trilho visual. */
+@media(min-width:901px){
+  .admin-shell > .sidebar:not(.hidden){
+    position:relative!important;top:auto!important;bottom:auto!important;
+    height:auto!important;min-height:100vh!important;max-height:none!important;
+    align-self:stretch!important;overflow:visible!important;
+  }
+  .admin-shell > .sidebar .admin-nav{
+    overflow:visible!important;overflow-x:visible!important;overflow-y:visible!important;
+    height:auto!important;max-height:none!important;min-height:0!important;
+    flex:0 0 auto!important;scrollbar-width:none!important;
+  }
+  .admin-shell > .sidebar .logout{margin-top:auto!important}
+}
+@media(max-width:900px){
+  .admin-shell > .sidebar:not(.hidden){
+    position:fixed!important;top:0!important;bottom:0!important;
+    height:100dvh!important;max-height:100dvh!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    overscroll-behavior:contain;scrollbar-width:none!important;-ms-overflow-style:none;
+  }
+  .admin-shell > .sidebar .admin-nav{overflow:visible!important;max-height:none!important;scrollbar-width:none!important;flex-shrink:0}
+  .admin-shell > .sidebar::-webkit-scrollbar,.admin-shell > .sidebar .admin-nav::-webkit-scrollbar{display:none!important}
+}
+
+/* V12.5 — seta vetorial e Jogos inicialmente recolhido, sem alterar a estrutura do menu. */
+.sidebar .casino-nav-chevron{display:block!important;flex:0 0 18px!important;width:18px!important;height:18px!important;margin-left:auto!important;transition:transform .2s ease;stroke:#ff6566!important;color:#ff6566!important}
+.sidebar .casino-nav-parent[aria-expanded=false] .casino-nav-chevron{transform:rotate(-90deg)}
+.sidebar .casino-nav-group.collapsed .casino-subnav{display:none!important}
+@media(prefers-reduced-motion:reduce){.sidebar .casino-nav-chevron{transition:none}}
+
+/* V12.6 — sidebar sem scroll lock no desktop e prévias maiores de provedores. */
+@media(min-width:901px){body.admin-page,html{overflow-y:auto!important}.admin-shell{align-items:start!important}.admin-shell>.sidebar,.sidebar{overflow:visible!important;position:relative!important;height:auto!important;min-height:100vh!important}}
+
+/* V12.11 — sincronização do catálogo PlayFiver */
+.games-api-title{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.games-api-title-actions{display:flex;align-items:center;gap:9px;flex-wrap:wrap;justify-content:flex-end}
+#sync-playfiver{min-height:40px;padding:10px 14px;white-space:nowrap}
+#sync-playfiver:disabled{opacity:.6;cursor:wait}
+.casino-sync-status{margin:-6px 0 15px;padding:10px 12px;border:1px solid #30383f;border-radius:9px;background:#14191d;color:#aeb7c0;font-size:11px;line-height:1.5}
+@media(max-width:760px){.games-api-title{align-items:flex-start;flex-direction:column}.games-api-title-actions{width:100%;justify-content:flex-start}}
