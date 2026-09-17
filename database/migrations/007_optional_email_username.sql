@@ -1,0 +1,3 @@
+ALTER TABLE users
+    MODIFY email VARCHAR(190) NULL,
+    MODIFY username VARCHAR(64) NULL;

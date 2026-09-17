@@ -1,0 +1,15 @@
+Options -Indexes
+RewriteEngine On
+
+# Forward the Authorization header to PHP under Apache/FastCGI setups.
+RewriteCond %{HTTP:Authorization} .
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+
+# Never expose hidden files from the public directory.
+<FilesMatch "^\.">
+    Require all denied
+</FilesMatch>
+
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule ^ index.php [QSA,L]

@@ -1,0 +1,25 @@
+{
+    "name": "igaming/core",
+    "description": "Lightweight modular iGaming platform in modern PHP without a framework - XAMPP/MariaDB edition",
+    "type": "project",
+    "require": {
+        "php": "^8.2",
+        "ext-pdo": "*",
+        "ext-pdo_mysql": "*",
+        "ext-json": "*",
+        "ext-curl": "*",
+        "ext-openssl": "*"
+    },
+    "autoload": {
+        "psr-4": {
+            "App\\": "src/"
+        }
+    },
+    "scripts": {
+        "serve": "php -S 127.0.0.1:8080 -t public",
+        "setup": "php bin/setup.php",
+        "migrate": "php bin/migrate.php",
+        "test": "php bin/test.php",
+        "admin:create": "php bin/create-admin.php"
+    }
+}

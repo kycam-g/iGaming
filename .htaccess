@@ -1,0 +1,13 @@
+Options -Indexes
+RewriteEngine On
+
+# Serve real files/directories from the project root directly (notably /assets on XAMPP).
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# Keep direct public requests untouched.
+RewriteRule ^public(?:/|$) - [L]
+
+# Everything else is internally routed through public/.
+RewriteRule ^(.*)$ public/$1 [L]
