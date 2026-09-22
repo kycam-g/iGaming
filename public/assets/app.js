@@ -1,6 +1,9 @@
 (() => {
   const cfg = window.IGAMING || {basePath:''};
   const base=(cfg.basePath||'').replace(/\/$/,'');
+  // O parâmetro público só é capturado antes do cadastro; vínculo efetivo ocorre no servidor.
+  const referralParam=(new URLSearchParams(window.location.search)).get('ref')||'';
+  if(/^[a-f0-9]{20}$/i.test(referralParam))sessionStorage.setItem('mz90_referral_code',referralParam.toUpperCase());
   const state={token:localStorage.getItem('igaming_token')||'',user:null,accounts:[],transactions:[],paymentGateways:[],activePayment:null,depositInFlight:false,depositIdempotencyKey:'',paymentPoll:null};
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
   const money=(minor=0,currency='BRL')=>new Intl.NumberFormat('pt-BR',{style:'currency',currency}).format(Number(minor)/100);
@@ -168,9 +171,9 @@
   function authTab(tab){$$('[data-auth-tab]').forEach(b=>b.classList.toggle('active',b.dataset.authTab===tab));$('#login-form').classList.toggle('hidden',tab!=='login');$('#register-form').classList.toggle('hidden',tab!=='register');$('#auth-alert').classList.add('hidden')}
   $$('[data-open-auth]').forEach(b=>b.addEventListener('click',()=>openAuth(b.dataset.openAuth)));$$('[data-auth-tab]').forEach(b=>b.addEventListener('click',()=>authTab(b.dataset.authTab)));$('#close-auth').addEventListener('click',()=>$('#auth-modal').classList.add('hidden'));$('#auth-modal').addEventListener('click',e=>{if(e.target.id==='auth-modal')e.currentTarget.classList.add('hidden')});
   function authError(err){const a=$('#auth-alert');a.textContent=err.message;a.classList.remove('hidden')}
-  async function finishAuth(data){state.token=data.token;state.user=data.user;localStorage.setItem('igaming_token',state.token);$('#auth-modal').classList.add('hidden');renderAuth();await loadWallet();toast('Bem-vindo ao MZ90!','success')}
+  async function finishAuth(data){state.token=data.token;state.user=data.user;localStorage.setItem('igaming_token',state.token);$('#auth-modal').classList.add('hidden');renderAuth();await loadWallet();document.dispatchEvent(new Event('mz:auth-ready'));toast('Bem-vindo ao MZ90!','success')}
   $('#login-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await finishAuth(await api('/api/auth/login',{method:'POST',body:JSON.stringify(Object.fromEntries(f))}))}catch(err){authError(err)}});
-  $('#register-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{await finishAuth(await api('/api/auth/register',{method:'POST',body:JSON.stringify(Object.fromEntries(f))}))}catch(err){authError(err)}});
+  $('#register-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const payload=Object.fromEntries(f);payload.referral_code=sessionStorage.getItem('mz90_referral_code')||'';await finishAuth(await api('/api/auth/register',{method:'POST',body:JSON.stringify(payload)}));sessionStorage.removeItem('mz90_referral_code')}catch(err){authError(err)}});
   const maskCpf=v=>{const d=v.replace(/\D/g,'').slice(0,11);return d.replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d)/,'$1.$2').replace(/(\d{3})(\d{1,2})$/,'$1-$2')};
   const maskPhone=v=>{const d=v.replace(/\D/g,'').slice(0,11);return d.length>10?d.replace(/(\d{2})(\d{5})(\d{0,4})/,'($1) $2-$3'):d.replace(/(\d{2})(\d{4})(\d{0,4})/,'($1) $2-$3')};
   const cpfInput=$('#register-form [name=cpf]'),phoneInput=$('#register-form [name=phone]');if(cpfInput)cpfInput.addEventListener('input',e=>e.target.value=maskCpf(e.target.value));if(phoneInput)phoneInput.addEventListener('input',e=>e.target.value=maskPhone(e.target.value));
@@ -178,7 +181,7 @@
   function renderWallet(){const total=state.accounts.reduce((sum,a)=>sum+Number(a.balance_minor||0),0);const walletTotal=$('#wallet-total');if(walletTotal)walletTotal.textContent=money(total);$('#header-balance').textContent=money(state.accounts.filter(a=>a.type==='CASH').reduce((sum,a)=>sum+Number(a.balance_minor||0),0));const accountLabel=type=>({CASH:'SALDO',BONUS:'BÔNUS',AFFILIATE:'AFILIADO'})[String(type).toUpperCase()]||String(type||'SALDO');const txLabel=type=>{const value=String(type||'').toUpperCase();if(value.includes('WITHDRAWAL'))return'SAQUE';if(value.includes('DEPOSIT'))return'DEPÓSITO';if(value.includes('BONUS'))return'BÔNUS';return value.replaceAll('_',' ')||'MOVIMENTAÇÃO'};const accounts=$('#wallet-accounts');if(accounts)accounts.innerHTML=state.accounts.length?state.accounts.map(a=>`<div class="account-row"><strong>${accountLabel(a.type)}</strong><b>${money(a.balance_minor,a.currency)}</b></div>`).join(''):'<div class="empty-state">Nenhuma conta encontrada.</div>';const transactions=$('#transaction-list');if(transactions)transactions.innerHTML=state.transactions.length?state.transactions.map(t=>`<div class="transaction-row profile-transaction"><div><strong class="${t.direction==='CREDIT'?'money-credit':'money-debit'}">${txLabel(t.type)} - ${money(t.amount_minor,t.currency)}</strong><small>${new Date(t.created_at).toLocaleString('pt-BR')}</small></div></div>`).join(''):'<div class="empty-state">Nenhuma movimentação.</div>'}
   document.addEventListener('mz:wallet-updated',()=>loadWallet());
   async function loadWallet(){if(!state.token){state.accounts=[];state.transactions=[];renderWallet();return}try{const [w,t]=await Promise.all([api('/api/wallet'),api('/api/wallet/transactions?limit=20')]);state.accounts=w.accounts||[];state.transactions=t.transactions||[];renderWallet()}catch(e){if(/unauthorized/i.test(e.message))logout(false)}}
-  async function restore(){if(!state.token){renderAuth();renderWallet();return}try{const r=await api('/api/me');state.user=r.user;renderAuth();await loadWallet()}catch{logout(false)}}
+  async function restore(){if(!state.token){renderAuth();renderWallet();return}try{const r=await api('/api/me');state.user=r.user;renderAuth();await loadWallet();document.dispatchEvent(new Event('mz:auth-ready'))}catch{logout(false)}}
   async function logout(callApi=true){try{if(callApi&&state.token)await api('/api/auth/logout',{method:'POST'})}catch{}state.token='';state.user=null;state.accounts=[];state.transactions=[];localStorage.removeItem('igaming_token');renderAuth();renderWallet();toast('Sessão encerrada.')}
   $('#user-avatar').addEventListener('click',()=>state.user?section('profile'):openAuth('login'));$('#profile-nav').addEventListener('click',()=>state.user?section('profile'):openAuth('login'));$('#profile-logout').addEventListener('click',async()=>{await logout(true);section('home')});$('#refresh-wallet')?.addEventListener('click',loadWallet);
   async function loadPaymentGateways(){const r=await api('/api/payments/gateways');state.paymentGateways=r.gateways||[];$('#gateway-select').innerHTML=state.paymentGateways.map(g=>`<option value="${g.code}">${g.name}${g.sandbox?' • Sandbox':''}</option>`).join('')}
@@ -202,7 +205,7 @@
       const data=await api('/api/platform/public');const settings=data.settings||{};
       setBrowserFavicon(settings.favicon_path);
       if(/^#[0-9a-fA-F]{6}$/.test(settings.accent_color||''))document.documentElement.style.setProperty('--platform-accent',settings.accent_color);
-      if(settings.site_name){document.title=settings.site_name;document.querySelectorAll('.brand-text b,.auth-brand strong').forEach(el=>el.textContent=settings.site_name);}
+      if(settings.site_name){document.title=settings.site_name;document.querySelectorAll('.brand-text b,.auth-brand strong,#drawer-brand-name').forEach(el=>el.textContent=settings.site_name);}
       const site=settings.site_name||'MZ90';
       const logo=$('#footer-logo'),brand=$('#footer-brand-name');if(brand)brand.textContent=site;
       const logoPath=String(settings.logo_path||'');const validLogo=/^\/uploads\/identity\/[a-z0-9_-]+\.(?:png|jpg|webp)$/i.test(logoPath);
@@ -211,6 +214,8 @@
       const headerLogo=$('#header-site-logo');const lockup=$('.brand-lockup');
       if(headerLogo){headerLogo.classList.toggle('hidden',!validLogo);if(validLogo){headerLogo.src=base+logoPath;headerLogo.alt=site}else headerLogo.removeAttribute('src')}
       if(lockup)lockup.classList.toggle('has-site-logo',validLogo);
+      const drawerLogo=$('#drawer-site-logo');
+      if(drawerLogo){drawerLogo.classList.toggle('hidden',!validLogo);if(validLogo){drawerLogo.src=base+logoPath;drawerLogo.alt=site}else drawerLogo.removeAttribute('src')}
       const footerAbout=$('#footer-about');if(footerAbout)footerAbout.textContent=settings.footer_about||`Conheça a ${site}: entretenimento online com responsabilidade. Plataforma destinada a maiores de 18 anos.`;
       const footerCopy=$('#footer-copy');if(footerCopy){const copyright=document.createElement('span');copyright.textContent=`© ${new Date().getFullYear()} ${site}.`;const rights=document.createElement('span');rights.textContent='Todos os direitos reservados.';footerCopy.replaceChildren(copyright,rights)}
       const iconPaths={

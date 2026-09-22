@@ -348,3 +348,14 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
 
 /* CRUD das configurações de Promoções (somente admin). */
 .promotion-manager-head{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:22px}.promotion-manager-head h2{margin:0 0 8px}.promotion-config-note{margin-top:16px}.promotion-config-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}.promotion-config-actions,.promotion-row-actions{display:flex;gap:8px;align-items:center}.promotion-row-actions button{white-space:nowrap;padding:9px 12px}.promotion-empty{text-align:center;padding:25px}.promotion-manager-head button{white-space:nowrap}@media(max-width:750px){.promotion-config-fields{grid-template-columns:1fr}.promotion-manager-head{align-items:flex-start;flex-direction:column}.promotion-row-actions{flex-wrap:wrap}}
+
+/* V16.2: rebate fixo tem formulário próprio, não usa a tabela CRUD de níveis. */
+#admin-promotion-detail.rebate-fixed-mode > .promotion-manager-head,
+#admin-promotion-detail.rebate-fixed-mode > .table-wrap,
+#admin-promotion-detail.rebate-fixed-mode > .promotion-config-note {display:none!important}
+#admin-promotion-detail.rebate-fixed-mode #mz-rebate-admin-report{margin:0;padding:0;border:0;background:transparent;box-shadow:none}
+#admin-promotion-detail.rebate-fixed-mode #mz-rebate-admin-report form{margin-top:18px}
+#admin-promotion-detail.rebate-fixed-mode #mz-rebate-admin-report details{margin-top:18px}
+
+.admin-site-logo{display:block;max-width:180px;width:auto;height:42px;object-fit:contain;flex:0 0 auto}
+.admin-brand span strong{display:block;font:inherit;color:inherit}

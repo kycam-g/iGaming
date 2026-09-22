@@ -3,8 +3,10 @@ const tokenKey='igaming_admin_token'; let token=localStorage.getItem(tokenKey)||
 async function api(path,options={}){const headers={'Content-Type':'application/json',...(options.headers||{})};if(token)headers.Authorization=`Bearer ${token}`;const r=await fetch(path,{...options,headers});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.message||data.error||`HTTP ${r.status}`);return data}
 
 function setAdminBrowserFavicon(path){const link=document.getElementById('browser-favicon')||document.createElement('link');link.id='browser-favicon';link.rel='icon';if(!link.parentNode)document.head.append(link);const value=String(path||'').trim();if(!/^\/uploads\/identity\/[a-z0-9_-]+\.(?:png|jpg|webp)$/i.test(value)){link.href='data:,';return}const ext=value.split('.').pop().toLowerCase();link.type=ext==='png'?'image/png':ext==='webp'?'image/webp':'image/jpeg';link.href=value}
+function applyAdminBranding(settings={}){const site=String(settings.site_name||'MZ90').trim()||'MZ90';const logoPath=String(settings.logo_path||'').trim();const validLogo=/^\/uploads\/identity\/[a-z0-9_-]+\.(?:png|jpg|webp)$/i.test(logoPath);const brandName=$('#admin-brand-name');if(brandName)brandName.textContent=site;const fallback=$('#admin-brand-fallback');if(fallback){fallback.textContent=(site[0]||'M').toUpperCase();fallback.classList.toggle('hidden',validLogo)}const logo=$('#admin-site-logo');if(logo){logo.classList.toggle('hidden',!validLogo);if(validLogo){logo.src=logoPath;logo.alt=site}else logo.removeAttribute('src')}document.title=`${site} Admin`;if(settings.favicon_path!==undefined)setAdminBrowserFavicon(settings.favicon_path)}
+async function syncPublicBranding(){try{const response=await fetch('/api/platform/public',{headers:{Accept:'application/json'}});if(!response.ok)return;const data=await response.json();applyAdminBranding(data.settings||{})}catch{}}
 async function syncPublicFavicon(){try{const response=await fetch('/api/platform/public',{headers:{Accept:'application/json'}});if(!response.ok)return;const data=await response.json();setAdminBrowserFavicon(data.settings?.favicon_path)}catch{}}
-syncPublicFavicon();
+syncPublicBranding();
 function alertBox(id,msg,ok=false){const e=$(id);e.textContent=msg;e.classList.remove('hidden','ok');if(ok)e.classList.add('ok');if(!ok){const overlay=document.querySelector('.admin-editor-overlay:not(.hidden)');if(overlay){const err=overlay.querySelector('.admin-editor-error');err.textContent=msg;err.classList.remove('hidden')}}}
 function money(minor){return new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(minor)||0)/100)}
 function shortId(id){return String(id||'').split('-')[0]||'—'}
@@ -300,7 +302,7 @@ document.querySelector('[data-casino-tab="credentials"]').addEventListener('clic
 
 // Plataforma: controles administrativos autenticados, sem mutação de saldo.
 let platformData={};let auditPage=1;
-async function loadPlatform(){try{platformData=await api('/admin/api/platform');setAdminBrowserFavicon(platformData.settings?.favicon_path);const f=$('#settings-form');for(const [k,v] of Object.entries(platformData.settings)){if(!f.elements[k])continue;if(k==='maintenance')f.elements[k].checked=v==='1';else f.elements[k].value=v;}for(const type of ['banners','promotions','affiliates'])renderPlatform(type);renderAnnouncements();populateIdentity()}catch(e){alertBox('#settings-alert',e.message)}}
+async function loadPlatform(){try{platformData=await api('/admin/api/platform');applyAdminBranding(platformData.settings||{});const f=$('#settings-form');for(const [k,v] of Object.entries(platformData.settings)){if(!f.elements[k])continue;if(k==='maintenance')f.elements[k].checked=v==='1';else f.elements[k].value=v;}for(const type of ['banners','promotions','affiliates'])renderPlatform(type);renderAnnouncements();populateIdentity()}catch(e){alertBox('#settings-alert',e.message)}}
 function renderAnnouncements(){
  const host=$('#announcements-list');host.replaceChildren();
  const rows=platformData.announcements||[];
@@ -407,7 +409,7 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
  const parent=document.querySelector('.promotion-admin-parent');
  const detail=document.querySelector('#admin-promotion-detail');
  const campaigns=document.querySelector('#admin-promotion-campaigns');
- const titles={vip:'Níveis VIP',coupons:'Cupons',checkin:'Check-in diário',roulette:'Roleta de boas-vindas',envelope:'Envelope vermelho',chests:'Baús e indicações',agency:'Agência',rebate:'Rebate',rescue:'Fundos de Resgate',weekly:'Compensação Semanal',cashwheel:'Roleta de Saque',lottery:'Sorteio','bonus-history':'Histórico de bônus','level-history':'Histórico de níveis'};
+ const titles={vip:'Níveis VIP',coupons:'Cupons',checkin:'Check-in diário',roulette:'Giro da Sorte',envelope:'Envelope vermelho',chests:'Baús e indicações',agency:'Agência',rebate:'Rebate',rescue:'Fundos de Resgate',cashwheel:'Roleta de Saque',lottery:'Sorteio','bonus-history':'Histórico de bônus','level-history':'Histórico de níveis'};
  const select=(key)=>{
   document.querySelectorAll('[data-admin-promotion-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminPromotionTab===key));
   detail.classList.toggle('hidden',!key);campaigns.classList.toggle('hidden',!!key);
@@ -423,14 +425,12 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
   vip:[['level','Nível VIP','integer'],['goal_cents','Meta de apostas acumuladas (R$)','money'],['bonus_cents','Bônus de upgrade (R$)','money'],['daily_bonus_cents','Bônus diário (R$)','money'],['weekly_bonus_cents','Bônus semanal (R$)','money'],['monthly_bonus_cents','Bônus mensal (R$)','money'],['maintenance_cents','Meta de manutenção mensal (R$)','money'],['rollover_x','Rollover (x)','decimal']],
   coupons:[['code','Código de resgate (4-64 letras/números)','code'],['quantity','Quantidade disponível','integer'],['bonus_min_cents','Bônus mínimo (R$)','money'],['bonus_max_cents','Bônus máximo (R$)','money'],['rollover_x','Rollover (x)','decimal']],
   checkin:[['day','Dia do check-in','integer'],['reward_min_cents','Recompensa mínima (R$)','money'],['reward_max_cents','Recompensa máxima (R$)','money'],['random_reward','Recompensa aleatória','bool'],['deposit_min_cents','Recarga necessária (R$)','money'],['bet_min_cents','Aposta necessária (R$)','money'],['extra_cents','Recompensa extra (R$)','money'],['rollover_x','Rollover (x)','decimal']],
-  roulette:[['reward_min_cents','Recompensa mínima (R$)','money'],['reward_max_cents','Recompensa máxima (R$)','money'],['deposit_min_cents','Depósito mínimo para ganhar rodada (R$)','money'],['spins_per_deposit','Rodadas por depósito qualificado','integer'],['spins_per_referral','Rodadas por indicado cadastrado','integer'],['referral_requires_signup','Exigir cadastro pelo link de indicação','bool'],['rollover_x','Rollover do prêmio (x)','decimal']],
-  envelope:[['auto_enabled','Autorizar oferta automática (configuração apenas)','bool'],['reward_min_cents','Valor mínimo (R$)','money'],['reward_max_cents','Valor máximo (R$)','money'],['multiplier_min','Multiplicador mínimo (x)','decimal'],['multiplier_max','Multiplicador máximo (x)','decimal'],['rollover_x','Rollover (x)','decimal']],
+  roulette:[['reward_min_cents','Prêmio mínimo (R$)','money'],['reward_max_cents','Prêmio máximo (R$)','money'],['win_chance_percent','Chance total de ganho (%)','decimal'],['deposit_min_cents','Depósito mínimo para ganhar rodada (R$)','money'],['spins_per_deposit','Rodadas por depósito qualificado','integer'],['spins_per_referral','Rodadas por indicado cadastrado','integer'],['referral_requires_signup','Exigir cadastro pelo link de indicação','bool'],['rollover_x','Rollover do prêmio (x)','decimal']],
+  envelope:[['auto_enabled','Ativar popup do Envelope Vermelho','bool'],['monday','Segunda-feira','bool'],['tuesday','Terça-feira','bool'],['wednesday','Quarta-feira','bool'],['thursday','Quinta-feira','bool'],['friday','Sexta-feira','bool'],['saturday','Sábado','bool'],['sunday','Domingo','bool'],['deposit_min_cents','Depósito mínimo semanal (R$)','money'],['deposit_percent','Percentual do depósito devolvido (%)','decimal'],['rollover_x','Rollover do prêmio (x)','decimal'],['message','Mensagem do popup','text']],
   chests:[['referral_count','Quantidade de indicados elegíveis','integer'],['referred_deposit_min_cents','Depósito mínimo por indicado (R$)','money'],['bonus_cents','Bônus ao indicador (R$)','money'],['rollover_x','Rollover necessário (x)','decimal'],['max_claims','Máximo de resgates por indicador (0 = sem limite)','integer']],
   agency:[['level','Nível','integer'],['team_bet_min_cents','Apostas válidas da equipe (R$)','money'],['commission_percent','Comissão (%)','decimal']],
-  rebate:[['level','Nível','integer'],['bet_volume_cents','Volume de apostas (R$)','money'],['rebate_percent','Rebate (%)','decimal']],
   rescue:[['level','Nível','integer'],['loss_min_cents','Perda mínima (R$)','money'],['refund_percent','Compensação (%)','decimal'],['rollover_x','Rollover (x)','decimal']],
-  weekly:[['level','Faixa','integer'],['loss_min_cents','Perda semanal (R$)','money'],['refund_percent','Compensação (%)','decimal'],['rollover_x','Rollover (x)','decimal']],
-  cashwheel:[['target_cents','Meta (R$)','money'],['duration_days','Duração (dias)','integer'],['free_spins_per_day','Rodadas gratuitas/dia','integer'],['referral_bonus_cents','Ajuda por indicado (R$)','money']],
+  cashwheel:[['target_cents','Meta para resgate (R$)','money'],['duration_days','Validade da sessão (dias)','integer'],['free_spins_per_day','Rodadas gratuitas por dia','integer'],['spin_min_cents','Avanço mínimo padrão (R$)','money'],['spin_max_cents','Avanço máximo padrão (R$)','money'],['first_spin_min_percent','Primeiro giro: mínimo da meta (%)','decimal'],['first_spin_max_percent','Primeiro giro: máximo da meta (%)','decimal'],['later_spin_max_percent','Giros seguintes: máximo da meta (%)','decimal'],['no_win_chance_percent','Chance de não ganhar nada (%)','decimal'],['cash_bonus_chance_percent','Chance de bônus direto em moeda (%)','decimal'],['cash_bonus_min_cents','Bônus direto mínimo (R$)','money'],['cash_bonus_max_cents','Bônus direto máximo (R$)','money'],['cash_bonus_rollover_x','Rollover do bônus direto (x)','decimal'],['referral_bonus_cents','Ajuda por indicado (R$)','money'],['rollover_x','Rollover do resgate da meta (x)','decimal']],
   lottery:[['spins_per_day','Rodadas por dia','integer'],['collection_bonus_cents','Prêmio por coleção completa (R$)','money'],['rollover_x','Rollover (x)','decimal']]
  };
  const $id=id=>document.getElementById(id);
@@ -447,9 +447,10 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
   const root=$id('promotion-config-fields');root.replaceChildren();
   for(const [key,label,kind] of definitions[active]){
    const field=document.createElement('label');field.textContent=label;
-   const control=document.createElement(kind==='bool'?'select':'input');control.name=key;
+   const control=document.createElement(kind==='bool'?'select':kind==='text'?'textarea':'input');control.name=key;
    if(kind==='bool'){for(const [v,t] of [['0','Não'],['1','Sim']]){const option=document.createElement('option');option.value=v;option.textContent=t;control.append(option)}control.value=String(item?.config?.[key]??0)}
    else if(kind==='code'){control.type='text';control.maxLength=64;control.pattern='[A-Za-z0-9_-]{4,64}';control.required=true;control.autocomplete='off';control.value=String(item?.config?.[key]||'');}
+   else if(kind==='text'){control.maxLength=240;control.rows=3;control.value=String(item?.config?.[key]||'');}
    else{control.type='number';control.min='0';control.step=kind==='integer'?'1':kind==='money'?'0.01':'0.01';control.required=true;control.value=item?.config?.[key]===undefined?'0':kind==='money'?(Number(item.config[key])/100).toFixed(2):String(item.config[key]);}
    field.append(control);root.append(field);
   }
@@ -470,10 +471,87 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
     for(const item of hist.items||[]){const line=document.createElement('p');line.textContent=`${item.username} • ${item.period_key} • VIP ${item.before_level} → ${item.after_level} • ${item.rule_applied} • ${brl(item.volume_minor)} / ${brl(item.required_minor)}`;summary.append(line);}panel.append(summary);
   }catch(error){panel.append(document.createTextNode('Falha ao carregar regras VIP: '+error.message));}
  }
+ async function loadAgencyReport(){
+  let panel=document.getElementById('mz-agency-admin-report');
+  if(!panel){panel=document.createElement('section');panel.id='mz-agency-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').prepend(panel);}
+  panel.replaceChildren();panel.append(Object.assign(document.createElement('h3'),{textContent:'Programa de agência • Comissão direta'}));
+  try{
+    const [settingsResponse,report]=await Promise.all([api('/admin/api/promotions/agency/settings'),api('/admin/api/promotions/agency/report')]);
+    const form=document.createElement('form');form.className='platform-form';const label=document.createElement('label');label.textContent='Ativar pagamentos de comissão';const toggle=document.createElement('input');toggle.type='checkbox';toggle.checked=!!settingsResponse.settings.enabled;label.append(toggle);
+    const note=document.createElement('p');note.className='hint';note.textContent='Ao ativar, a comissão considera apenas apostas confirmadas a partir deste momento, de indicados diretos. Configure e habilite pelo menos uma faixa abaixo. O processamento é feito por cron; desligar interrompe novos pagamentos.';
+    const button=document.createElement('button');button.className='gold-button';button.type='submit';button.textContent='Salvar status da agência';const message=document.createElement('p');message.setAttribute('role','status');
+    form.append(label,note,button,message);form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;try{const result=await api('/admin/api/promotions/agency/settings',{method:'POST',body:JSON.stringify({enabled:toggle.checked})});message.textContent=result.settings.enabled?'Agência ativada. Configure o cron para processar apostas.':'Comissões desativadas.';await loadAgencyReport();}catch(error){message.textContent=error.message;button.disabled=false;}});panel.append(form);
+    const section=document.createElement('details');const summary=document.createElement('summary');summary.textContent='Relatório de comissões ('+(report.referrers||[]).length+' indicadores)';section.append(summary);
+    if(!(report.referrers||[]).length)section.append(document.createTextNode('Nenhuma comissão processada ainda.'));
+    else{const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table'),head=document.createElement('thead'),row=document.createElement('tr');for(const title of ['Indicador','Apostas processadas','Comissões creditadas','Eventos']){const th=document.createElement('th');th.textContent=title;row.append(th);}head.append(row);table.append(head);const body=document.createElement('tbody');for(const r of report.referrers){const tr=document.createElement('tr');for(const value of [r.username,brl(r.bets_minor),brl(r.commissions_minor),r.events]){const td=document.createElement('td');td.textContent=String(value);tr.append(td);}body.append(tr);}table.append(body);wrap.append(table);section.append(wrap);}panel.append(section);
+  }catch(error){const message=document.createElement('p');message.textContent='Falha ao carregar agência: '+error.message;panel.append(message);}
+ }
+ async function loadRebateReport(){
+  let panel=document.getElementById('mz-rebate-admin-report');
+  if(!panel){panel=document.createElement('section');panel.id='mz-rebate-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').prepend(panel);}
+  panel.replaceChildren();panel.append(Object.assign(document.createElement('h3'),{textContent:'Rebate • Configurações e pagamentos'}));
+  try{
+   const result=await api('/admin/api/promotions/rebate/settings');
+   const form=document.createElement('form');form.className='platform-form';
+   const label=document.createElement('label');label.textContent='Ativar pagamento de rebate';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=!!result.settings.enabled;label.append(enabled);
+   const minimum=document.createElement('label');minimum.textContent='Resgate mínimo (R$)';const amount=document.createElement('input');amount.type='number';amount.min='0.01';amount.max='1000000';amount.step='0.01';amount.required=true;amount.value=(Number(result.settings.min_claim_minor||100)/100).toFixed(2);minimum.append(amount);
+   const rateLabel=document.createElement('label');rateLabel.textContent='Taxa fixa sobre cada aposta válida (%)';const rate=document.createElement('input');rate.type='number';rate.min='0.01';rate.max='10';rate.step='0.01';rate.required=true;rate.value=(Number(result.settings.rate_basis_points||0)/100).toFixed(2);rateLabel.append(rate);
+   const note=document.createElement('p');note.className='hint';note.textContent='Sem níveis ou metas. Toda aposta válida após a ativação recebe a taxa fixa. Ao alterar a taxa, cada aposta utiliza a porcentagem vigente na data em que ocorreu, inclusive quando o cron estiver atrasado. Valores pendentes anteriores são preservados. Execute process-rebate.php e valide estornos antes de produção. Sem rollover adicional.';
+   const button=document.createElement('button');button.type='submit';button.className='gold-button';button.textContent='Salvar configuração';const message=document.createElement('p');message.setAttribute('role','status');
+   form.append(label,rateLabel,minimum,note,button,message);form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;try{const result=await api('/admin/api/promotions/rebate/settings',{method:'POST',body:JSON.stringify({enabled:enabled.checked,min_claim_minor:Math.round(Number(amount.value)*100),rate_basis_points:Math.round(Number(rate.value)*100)})});message.textContent=result.settings.enabled?'Rebate ativado. Verifique o cron e as transações.':'Rebate desativado.';await loadRebateReport();}catch(error){message.textContent=error.message;button.disabled=false;}});panel.append(form);
+   const report=await api('/admin/api/promotions/rebate/report').catch(error=>({users:[],reportError:error.message}));
+   const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Relatório de rebate ('+(report.users||[]).length+' jogadores)';details.append(summary);
+   if(report.reportError){const warning=document.createElement('p');warning.setAttribute('role','alert');warning.textContent='Relatório indisponível: '+report.reportError;details.append(warning);}
+   if(!(report.users||[]).length)details.append(document.createTextNode('Nenhum rebate calculado ainda.'));
+   else{const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table');const thead=document.createElement('thead');const tr=document.createElement('tr');for(const text of ['Jogador','Volume','Disponível','Resgatado']){const cell=document.createElement('th');cell.textContent=text;tr.append(cell);}thead.append(tr);table.append(thead);const tbody=document.createElement('tbody');for(const user of report.users){const row=document.createElement('tr');for(const text of [user.username,brl(user.volume_minor),brl(Math.floor(Number(user.pending_units)/10000)),brl(user.claimed_minor)]){const cell=document.createElement('td');cell.textContent=String(text);row.append(cell);}tbody.append(row);}table.append(tbody);wrap.append(table);details.append(wrap);}panel.append(details);
+  }catch(error){const warning=document.createElement('p');warning.setAttribute('role','alert');warning.textContent='Não foi possível carregar as configurações do rebate: '+error.message+'. Confirme que a migração 024 foi aplicada e atualize a página.';panel.append(warning);}
+ }
+ async function loadRescueReport(){
+  let panel=document.getElementById('mz-rescue-admin-report');
+  if(!panel){panel=document.createElement('section');panel.id='mz-rescue-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').prepend(panel);}
+  panel.replaceChildren();panel.append(Object.assign(document.createElement('h3'),{textContent:'Fundos de Resgate • Ativação e apuração diária'}));
+  try{
+   const result=await api('/admin/api/promotions/rescue/settings');
+   const form=document.createElement('form');form.className='platform-form';
+   const label=document.createElement('label');label.textContent='Ativar cálculo diário dos Fundos de Resgate';const enabled=document.createElement('input');enabled.type='checkbox';enabled.checked=!!result.settings.enabled;label.append(enabled);
+   const note=document.createElement('p');note.className='hint';note.textContent='A ativação vale a partir de 00h do dia seguinte (Brasília); não há bônus retroativo. Configure as faixas abaixo e execute o cron process-rescue.php depois da meia-noite. O jogador só pode receber a recompensa no dia seguinte ao da perda. Desativar impede novos resgates. Valide ganhos tardios, estornos e conciliação antes de produção.';
+   const effective=document.createElement('p');effective.className='hint';effective.textContent='Início efetivo: '+(result.settings.effective_day||'não ativado');
+   const button=document.createElement('button');button.type='submit';button.className='gold-button';button.textContent='Salvar ativação';const message=document.createElement('p');message.setAttribute('role','status');
+   form.append(label,note,effective,button,message);form.addEventListener('submit',async e=>{e.preventDefault();button.disabled=true;try{const res=await api('/admin/api/promotions/rescue/settings',{method:'POST',body:JSON.stringify({enabled:enabled.checked})});message.textContent=res.settings.enabled?'Campanha ativada. Início: '+res.settings.effective_day:'Campanha desativada.';await loadRescueReport();}catch(error){message.textContent=error.message;button.disabled=false;}});panel.append(form);
+   const report=await api('/admin/api/promotions/rescue/report').catch(error=>({awards:[],error:error.message}));
+   const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='Histórico de apurações ('+(report.awards||[]).length+')';details.append(summary);
+   if(report.error)details.append(Object.assign(document.createElement('p'),{textContent:report.error}));
+   else if(!report.awards.length)details.append(document.createTextNode('Nenhum período processado.'));
+   else{const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table');const head=document.createElement('thead'),headRow=document.createElement('tr');for(const v of ['Jogador','Período','Apostas','Ganhos','Perda','Bônus','Status']){const th=document.createElement('th');th.textContent=v;headRow.append(th);}head.append(headRow);table.append(head);const body=document.createElement('tbody');for(const a of report.awards){const row=document.createElement('tr');for(const v of [a.username,a.period_key,brl(a.bet_minor),brl(a.win_minor),brl(a.loss_minor),brl(a.amount_minor),a.state]){const cell=document.createElement('td');cell.textContent=String(v);row.append(cell);}body.append(row);}table.append(body);wrap.append(table);details.append(wrap);}panel.append(details);
+  }catch(error){panel.append(Object.assign(document.createElement('p'),{textContent:'Não foi possível carregar Fundos de Resgate: '+error.message+'. Execute a migração 025.'}));}
+ }
+ async function loadChestReport(){
+  let panel=document.getElementById('mz-chest-admin-report');
+  if(!panel){panel=document.createElement('section');panel.id='mz-chest-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').append(panel);}
+  panel.replaceChildren();const heading=document.createElement('h3');heading.textContent='Indicações vinculadas e depósitos pagos';panel.append(heading);
+  const note=document.createElement('p');note.className='hint';note.textContent='Apenas registros vinculados no cadastro. A qualificação de cada baú usa o depósito mínimo definido nele; resgates aparecem em Histórico de bônus.';panel.append(note);
+  try{const data=await api('/admin/api/promotions/chests/report');const entries=data.referrers||[];
+    if(!entries.length){panel.append(document.createTextNode('Nenhuma indicação registrada.'));return;}
+    const table=document.createElement('table');const head=document.createElement('thead');const h=document.createElement('tr');for(const label of ['Indicador (ID)','Cadastrados pelo link','Depósitos pagos (total)']){const th=document.createElement('th');th.textContent=label;h.append(th);}head.append(h);table.append(head);
+    const body=document.createElement('tbody');for(const item of entries){const row=document.createElement('tr');for(const value of [item.referrer_user_id,item.registered,brl(item.paid_deposits_minor)]){const cell=document.createElement('td');cell.textContent=String(value);row.append(cell);}body.append(row);}table.append(body);const wrap=document.createElement('div');wrap.className='table-wrap';wrap.append(table);panel.append(wrap);
+  }catch(error){panel.append(document.createTextNode('Não foi possível consultar as indicações: '+error.message));}
+ }
  const load=async()=>{
   if(!definitions[active])return;
   if(active==='vip')loadVipSettings();
-  try{const data=await api('/admin/api/promotion-configs?type='+encodeURIComponent(active));if(!definitions[active])return;items=data.items||[];render();}
+  if(active==='chests')loadChestReport();
+  if(active==='agency')loadAgencyReport();
+  if(active==='rescue')loadRescueReport();
+  try{const data=await api('/admin/api/promotion-configs?type='+encodeURIComponent(active));if(!definitions[active])return;items=data.items||[];render();
+    const addButton=$id('promotion-config-new');
+    if(active==='roulette'||active==='cashwheel'){
+      addButton.disabled=items.length>0;
+      const singleName=active==='roulette'?'Giro da Sorte':'Roleta de Saque';
+      addButton.textContent=items.length>0?'Configuração única já cadastrada':'Nova configuração';
+      addButton.title=items.length>0?`Edite a configuração existente da ${singleName}.`:`Cadastrar ${singleName}`;
+    }else{
+      addButton.disabled=false;addButton.textContent='Nova configuração';addButton.title='';
+    }}
   catch(e){notify('Não foi possível carregar configurações: '+e.message+'. Execute a migration 018 no servidor.');}
  };
  const render=()=>{
@@ -492,14 +570,49 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
   const tr=document.createElement('tr');for(const label of ['Jogador','Promoção','Campanha','Dia','Valor','Rollover','Status','Data']){const th=document.createElement('th');th.textContent=label;tr.append(th)}head.append(tr);
   try{const data=await api('/admin/api/promotions/redemptions');for(const item of data.items||[]){const row=document.createElement('tr');for(const value of [item.username,item.promotion_type,item.title,item.day_key||'—',brl(item.amount_minor),brl(item.wager_progress_minor)+' / '+brl(item.wager_required_minor),item.status,item.created_at]){const td=document.createElement('td');td.textContent=String(value??'');row.append(td)}body.append(row)}if(!data.items?.length){const row=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='Nenhum resgate registrado.';row.append(td);body.append(row)}}catch(error){notify('Falha ao consultar resgates: '+error.message)}
  }
- window.promotionConfigSelect=key=>{active=key;const vipPanel=document.getElementById('mz-vip-admin-settings');if(vipPanel)vipPanel.classList.toggle('hidden',key!=='vip');const supported=!!definitions[key];$id('promotion-config-new').classList.toggle('hidden',!supported);$id('promotion-config-head').replaceChildren();$id('promotion-config-body').replaceChildren();$id('promotion-config-alert').classList.add('hidden');
-  if(!supported){if(key==='bonus-history')loadRedemptionHistory();else if(key==='level-history'){(async()=>{try{const response=await api('/admin/api/promotions/vip/reviews');const body=$id('promotion-config-body');for(const item of response.items||[]){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent=`${item.username} · ${item.period_key} · VIP ${item.before_level} → ${item.after_level} · ${item.rule_applied} · ${brl(item.volume_minor)} / ${brl(item.required_minor)}`;tr.append(td);body.append(tr)}if(!response.items?.length){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent='Nenhuma revisão mensal registrada.';tr.append(td);body.append(tr)}}catch(err){notify(err.message)}})();}return;}load();};
+ async function loadEnvelopeReport(){
+   let panel=document.getElementById('mz-envelope-admin-report');
+   if(!panel){panel=document.createElement('section');panel.id='mz-envelope-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').append(panel);}
+   panel.replaceChildren();const heading=document.createElement('h3');heading.textContent='Histórico • Envelope Vermelho';panel.append(heading);
+   const note=document.createElement('p');note.className='hint';note.textContent='O popup só aparece nos dias selecionados. A elegibilidade usa a soma dos depósitos PAID da semana (segunda 00:00 até domingo 23:59, horário de Brasília). Cada jogador pode abrir apenas 1 envelope por semana, e o prêmio é calculado pela porcentagem configurada sobre o total depositado na semana.';panel.append(note);
+   try{const data=await api('/admin/api/promotions/envelope/report');
+     if(!data.items?.length){panel.append(document.createTextNode('Nenhum envelope aberto ainda.'));return;}
+     const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table');const head=document.createElement('thead'),hr=document.createElement('tr');
+     for(const label of ['Jogador','Semana','Depósitos da semana','Percentual','Prêmio','Rollover','Status']){const th=document.createElement('th');th.textContent=label;hr.append(th);}head.append(hr);table.append(head);const body=document.createElement('tbody');
+     for(const item of data.items){const row=document.createElement('tr');for(const value of [item.username,item.day_key,brl(item.deposit_total_minor),Number(item.deposit_percent).toLocaleString('pt-BR')+'%',brl(item.final_amount_minor),brl(item.wager_required_minor),item.status||'—']){const td=document.createElement('td');td.textContent=String(value);row.append(td);}body.append(row);}table.append(body);wrap.append(table);panel.append(wrap);
+   }catch(error){panel.append(document.createTextNode('Falha ao carregar envelopes: '+error.message));}
+ }
+ async function loadRouletteReport(){
+   let panel=document.getElementById('mz-roulette-admin-report');
+   if(!panel){panel=document.createElement('section');panel.id='mz-roulette-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').append(panel);}
+   panel.replaceChildren();const heading=document.createElement('h3');heading.textContent='Histórico das rodadas • Giro da Sorte';panel.append(heading);
+   try{const data=await api('/admin/api/promotions/roulette/report');
+     if(!data.spins?.length){const note=document.createElement('p');note.textContent='Nenhuma rodada registrada.';panel.append(note);return;}
+     const table=document.createElement('table');table.className='promotion-config-table';const header=document.createElement('tr');
+     for(const label of ['Usuário','Campanha','Prêmio','Rollover exigido','Status','Data']){const th=document.createElement('th');th.textContent=label;header.append(th);}table.append(header);
+     for(const spin of data.spins){const row=document.createElement('tr');for(const text of [spin.username,spin.title,brl(spin.prize_minor),brl(spin.wager_required_minor),spin.status,spin.created_at]){const cell=document.createElement('td');cell.textContent=String(text??'');row.append(cell);}table.append(row);}panel.append(table);
+   }catch(error){const note=document.createElement('p');note.textContent='Falha ao carregar relatório: '+error.message;panel.append(note);}
+ }
+
+ async function loadCashwheelReport(){
+   let panel=document.getElementById('mz-cashwheel-admin-report');
+   if(!panel){panel=document.createElement('section');panel.id='mz-cashwheel-admin-report';panel.className='panel';document.querySelector('#admin-promotion-detail').append(panel);}
+   panel.replaceChildren();const heading=document.createElement('h3');heading.textContent='Participações • Roleta de Saque';panel.append(heading);
+   const note=document.createElement('p');note.className='hint';note.textContent='O saldo desta campanha é separado da carteira e só é creditado quando o jogador atinge a meta e solicita o resgate.';panel.append(note);
+   try{const data=await api('/admin/api/promotions/cashwheel/report');
+     if(!data.items?.length){panel.append(document.createTextNode('Nenhuma participação registrada ainda.'));return;}
+     const wrap=document.createElement('div');wrap.className='table-wrap';const table=document.createElement('table');table.innerHTML='<thead><tr><th>Jogador</th><th>Progresso</th><th>Status</th><th>Início</th><th>Expira</th></tr></thead><tbody></tbody>';const body=table.querySelector('tbody');
+     for(const row of data.items){const tr=document.createElement('tr');tr.innerHTML=`<td>${escapeHtml(row.username)}</td><td>${money(row.progress_minor)}</td><td>${escapeHtml(row.status)}</td><td>${dateTime(row.started_at)}</td><td>${dateTime(row.expires_at)}</td>`;body.append(tr);}wrap.append(table);panel.append(wrap);
+   }catch(error){panel.append(document.createTextNode('Falha ao carregar a Roleta de Saque: '+error.message));}
+ }
+ window.promotionConfigSelect=key=>{active=key;const vipPanel=document.getElementById('mz-vip-admin-settings');if(vipPanel)vipPanel.classList.toggle('hidden',key!=='vip');const chestPanel=document.getElementById('mz-chest-admin-report');if(chestPanel)chestPanel.classList.toggle('hidden',key!=='chests');const agencyPanel=document.getElementById('mz-agency-admin-report');if(agencyPanel)agencyPanel.classList.toggle('hidden',key!=='agency');const rebatePanel=document.getElementById('mz-rebate-admin-report');if(rebatePanel)rebatePanel.classList.toggle('hidden',key!=='rebate');const rescuePanel=document.getElementById('mz-rescue-admin-report');if(rescuePanel)rescuePanel.classList.toggle('hidden',key!=='rescue');const roulettePanel=document.getElementById('mz-roulette-admin-report');if(roulettePanel)roulettePanel.classList.toggle('hidden',key!=='roulette');const envelopePanel=document.getElementById('mz-envelope-admin-report');if(envelopePanel)envelopePanel.classList.toggle('hidden',key!=='envelope');const cashwheelPanel=document.getElementById('mz-cashwheel-admin-report');if(cashwheelPanel)cashwheelPanel.classList.toggle('hidden',key!=='cashwheel');if(key==='roulette')loadRouletteReport();if(key==='envelope')loadEnvelopeReport();if(key==='cashwheel')loadCashwheelReport();const supported=!!definitions[key];$id('admin-promotion-detail').classList.toggle('rebate-fixed-mode',key==='rebate');$id('promotion-config-new').classList.toggle('hidden',!supported);$id('promotion-config-head').replaceChildren();$id('promotion-config-body').replaceChildren();$id('promotion-config-alert').classList.add('hidden');
+  if(!supported){if(key==='rebate')loadRebateReport();else if(key==='bonus-history')loadRedemptionHistory();else if(key==='level-history'){(async()=>{try{const response=await api('/admin/api/promotions/vip/reviews');const body=$id('promotion-config-body');for(const item of response.items||[]){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent=`${item.username} · ${item.period_key} · VIP ${item.before_level} → ${item.after_level} · ${item.rule_applied} · ${brl(item.volume_minor)} / ${brl(item.required_minor)}`;tr.append(td);body.append(tr)}if(!response.items?.length){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent='Nenhuma revisão mensal registrada.';tr.append(td);body.append(tr)}}catch(err){notify(err.message)}})();}return;}load();};
  $id('promotion-config-new').addEventListener('click',()=>{if(definitions[active])open(null)});
  $id('promotion-config-close').addEventListener('click',close);$id('promotion-config-cancel').addEventListener('click',close);
  overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
  document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!overlay.classList.contains('hidden'))close()});
  form.addEventListener('submit',async e=>{e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;
-  try{const config={};for(const [key,,kind] of definitions[active]){const raw=form.elements[key].value;config[key]=kind==='code'?String(raw).trim().toUpperCase():kind==='bool'?Number(raw):kind==='money'?Math.round(Number(raw)*100):Number(raw)}
+  try{const config={};for(const [key,,kind] of definitions[active]){const raw=form.elements[key].value;config[key]=kind==='code'?String(raw).trim().toUpperCase():kind==='text'?String(raw).trim():kind==='bool'?Number(raw):kind==='money'?Math.round(Number(raw)*100):Number(raw)}
    await api('/admin/api/promotion-configs/save',{method:'POST',body:JSON.stringify({type:active,id:form.elements.id.value||0,title:form.elements.title.value,enabled:form.elements.enabled.checked,config})});close();await load();notify('Configuração salva com sucesso.',true);
   }catch(err){const el=$id('promotion-config-modal-error');el.textContent=err.message;el.classList.remove('hidden')}finally{button.disabled=false}
  });

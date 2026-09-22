@@ -1070,3 +1070,190 @@ Consulte `docs/V13_1_VIP.md` para migração obrigatória 020, configuração ad
 - Check-in mantém os cards como conteúdo principal e apresenta regras em seção opcional abaixo, sem restabelecer a antiga listagem de requisitos no topo.
 - Nenhuma alteração no banco, nos créditos ou no processamento financeiro. Sem migração nova; preservar `.env` e atualizar os arquivos/cache.
 - Recomenda-se validar a interface em dispositivos móveis e confirmar regras legais e comerciais antes de publicar campanhas em produção.
+
+
+## V14 — Baú do Tesouro funcional por depósito confirmado
+
+- Cadastro por link exclusivo de jogador, vínculo imutável e uma conta indicada por indicador.
+- Baús na Home: link de convite, progresso por campanha, cards verdes quando disponíveis, resgate em transação segura com carteira e rollover.
+- O bônus **só fica resgatável quando o número configurado de indicados realizar o depósito mínimo configurado no Admin**, contabilizando apenas pagamentos confirmados (`PAID`).
+- Admin: cadastro e ativação de campanhas em **Promoções → Baús e indicações**, resumo de indicações e pagamentos e histórico de créditos em **Histórico de bônus**.
+- Migração obrigatória: `php bin/migrate.php` aplica `021_referral_chests.sql`. Preserve seu `.env` e faça backup. Não há atribuição retroativa de usuários.
+- Instruções completas, limitações e plano de testes em `docs/V14_REFERRAL_CHESTS.md`. Verificar com MySQL real em homologação antes de produção.
+
+## V15 — Agência e Indicações
+
+- Nova página da Agência na Home: link de convite, métricas reais, lista de indicados, faixas e histórico de comissões, com layout vermelho e grafite.
+- Novo painel administrativo para ativação explícita, regras e relatório; gerenciamento das faixas continua no CRUD de promoções.
+- Comissões de indicação direta calculadas por job sobre apostas PlayFiver confirmadas, com registro idempotente e crédito na conta AFFILIATE. Baús mantêm requisito próprio de depósito mínimo; agência não recebe por mero cadastro ou depósito.
+- Migration obrigatória `022_agency_commissions.sql`. Agendar `php bin/process-agency.php` no cron; por segurança a agência nasce **desativada**.
+- A integração não realiza transferências da conta AFFILIATE para CASH e não cobre estorno de aposta já paga. Antes de produção, testar saldos, reversões e idempotência em homologação com MySQL/PlayFiver.
+- Veja `docs/V15_AGENCY.md` para instalação, política e testes.
+
+## V16 — Rebate do Site (próximo módulo)
+
+- Página Rebate na Home com volume de apostas, faixa atual, saldo disponível, histórico e botão Receber, respeitando o tema do projeto.
+- Administração das faixas existentes, novo painel para habilitar/desabilitar a campanha, definir valor mínimo de resgate e consultar relatório.
+- Migração `023_rebate.sql` cria configuração, contas de acúmulo, eventos de apostas idempotentes e histórico de resgates.
+- Processador CLI `bin/process-rebate.php` contabiliza exclusivamente apostas PlayFiver confirmadas após a ativação; taxas por faixa, frações de centavos preservadas; resgate transacional para conta CASH sem rollover adicional.
+- Campanha desativada por padrão. Configurar cron após migração e testar em homologação antes de produzir créditos reais.
+- Manual detalhado: `docs/V16_REBATE.md` (inclui limitações de reversões/estornos).
+
+### V16.1 — Rebate fixo (sem níveis)
+
+- Taxa única em **Admin → Promoções → Rebate**; remoção da gestão de faixas e dos cards de progressão na Home.
+- Migração 024: taxa fixa e histórico de alterações de porcentagem. Migração desativa a campanha anterior, preservando créditos/históricos; administrador deve configurar taxa e reativar.
+- O processamento usa a taxa vigente no horário da aposta, não no horário do cron. O volume exibido é apenas informativo.
+- Instruções, ressalvas sobre reativação e testes: `docs/V16_1_REBATE_FIXO.md`.
+
+
+### V16.2 — Correção da tela de configuração do rebate fixo
+
+- Corrigido o seletor do Admin que não chamava o formulário próprio de Rebate após retirar o módulo do CRUD de níveis.
+- A tela mostra ativação, taxa fixa e resgate mínimo; a antiga tabela de faixas é ocultada apenas nesta página.
+- Falhas no relatório não escondem o formulário: a consulta de configurações é independente e os erros são exibidos.
+- Cache CSS/JS atualizado. Nenhuma migração adicional: exige a migração 024 da V16.1, se ainda pendente.
+- Atualizar os arquivos da V16.2 preservando `.env` e banco. Validar ativação e créditos em homologação.
+
+## V17 — Fundos de Resgate
+
+- Nova tela do jogador com apostas, ganhos, perda líquida, fundo do dia anterior, status de resgate, faixas e histórico, no tema vermelho/grafite.
+- Configuração administrativa para habilitar/desabilitar; faixas CRUD já disponíveis (perda mínima, taxa, rollover), relatório de apurações.
+- Apuração diária idempotente a partir de lançamentos PlayFiver `COMPLETED` da conta CASH; resgate transacional pela carteira com rollover usando infraestrutura de bônus existente.
+- Sem retroatividade: habilitar passa a valer às 00h do dia seguinte, em Brasília. Só se resgata no dia posterior ao da perda; valores não resgatados expiram.
+- **Migração `025_rescue_daily.sql` obrigatória**: faça backup antes de executar `php bin/migrate.php` e preserve `.env`.
+- Cron: `php bin/process-rescue.php`, uma vez ao dia após a virada de Brasília. Detalhes, limitações financeiras e plano de validação: [`docs/V17_FUNDOS_RESGATE.md`](docs/V17_FUNDOS_RESGATE.md).
+- **Não liberar pagamentos em produção sem homologação real de callbacks, resultados tardios, estornos, timezone, concorrência e rollover**. Não houve integração com MySQL/PlayFiver neste ambiente.
+
+
+## V18 — retirada da Compensação Semanal independente
+
+- Mantido apenas **Fundos de Resgate diário** como programa de cashback sobre perdas.
+- Removidos o item 'Semana' do menu lateral, o módulo da Central de Promoções e o submenu/formulário da campanha semanal no Admin.
+- Rejeita criar/editar campanhas antigas do tipo `weekly` no backend e omite essas configurações na API pública.
+- Migração 026 desativa configurações históricas semanais sem excluí-las ou alterar saldos/históricos.
+- **O bônus VIP semanal não foi removido**. O Rebate fixo também não mudou.
+- Backup, preservar `.env`, executar `php bin/migrate.php` e atualizar cache. Guia: `docs/V18_ORGANIZACAO.md`.
+
+## V19 — Roleta de Boas-vindas
+
+- Novo backend `WelcomeRouletteService` com rodadas originadas apenas de depósitos pagos ou cadastros por indicação após a ativação da campanha. Chaves únicas por origem impedem concessão duplicada.
+- Giro autenticado transacional no servidor, prêmio aleatório uniforme em centavos, crédito em CASH ou BONUS e histórico/auditoria no ledger.
+- Página da Home com roleta ilustrativa, saldo de giros, regras claras, botão de giro e histórico. Admin mantém CRUD e ganhou relatório dos giros.
+- Migração **027_welcome_roulette.sql obrigatória**. Preserve o `.env`, faça backup e execute `php bin/migrate.php`.
+- Veja `docs/V19_ROLETA_BOAS_VINDAS.md` para implantação, regras, limitações e roteiro de homologação. **Não ative premiações em produção antes de validar estornos e callbacks reais.**
+
+## V19.3 — Giro da Sorte editável após emissão de rodadas
+
+- Removida a trava que impedia editar o Giro da Sorte depois que alguma rodada já havia sido emitida.
+- Créditos e giros já existentes permanecem preservados no histórico.
+- Ao alterar regras da roleta, a nova configuração passa a valer apenas para novos depósitos/indicações a partir do momento da edição, evitando geração retroativa de rodadas.
+- Prêmios, chance de ganho, rollover e requisitos podem ser editados diretamente no único Giro da Sorte cadastrado.
+- Não exige nova migração.
+
+## V20 — Envelope Vermelho funcional
+
+- O próximo módulo funcional é o **Envelope Vermelho**.
+- Quando a liberação diária estiver ativa, cada jogador pode abrir **1 envelope por dia**.
+- O Admin configura valor base mínimo/máximo, multiplicador mínimo/máximo, rollover e mensagem exibida ao jogador.
+- O prêmio final é calculado no servidor como `valor base sorteado × multiplicador sorteado`.
+- O crédito usa a carteira financeira existente e respeita o rollover configurado.
+- Foi criado histórico independente dos envelopes para preservar auditoria e impedir duplicidade diária.
+- A página pública recebeu um card premium com animação de abertura, resultado e histórico.
+- O Admin recebeu relatório dos envelopes abertos.
+- Nova migration obrigatória: `028_red_envelope.sql`.
+
+## V20.1 — Envelope Vermelho por popup, dia da semana e depósito
+
+- O Envelope Vermelho deixou de ser uma página pública e foi removido do menu lateral da Home.
+- O benefício aparece como popup automático ao entrar na conta somente quando o jogador estiver elegível.
+- O Admin escolhe os dias da semana em que o envelope pode existir (segunda a domingo).
+- O jogador precisa ter depósito `PAID` confirmado no próprio dia; sem depósito, o popup não aparece e não há direito ao benefício.
+- A recompensa é calculada como uma porcentagem configurável sobre o total de depósitos confirmados do jogador naquele dia, respeitando um depósito mínimo configurável.
+- Continua existindo no máximo um resgate por jogador/campanha/dia e os históricos financeiros permanecem preservados.
+- O popup mostra apenas a experiência visual e o prêmio final; valores técnicos de base, multiplicador ou rollover não são exibidos ao jogador.
+- A migration `029_red_envelope_popup.sql` desativa a liberação automática e zera os dias da semana para exigir revisão segura no Admin após a atualização.
+
+Após atualizar, execute `php bin/migrate.php`, depois configure em **Admin → Promoções → Envelope vermelho**: dias permitidos, depósito mínimo, percentual do depósito, rollover, mensagem e ativação do popup.
+
+
+## V20.2 — Envelope Vermelho com depósito mínimo semanal
+
+- O campo administrativo **Depósito mínimo no dia** foi alterado para **Depósito mínimo semanal**.
+- A soma elegível considera depósitos `PAID` da semana de segunda-feira 00:00 até a próxima segunda-feira 00:00, no horário de Brasília.
+- Os dias marcados no Admin definem somente quando o popup pode aparecer (ex.: sexta, sábado e domingo).
+- Cada jogador pode abrir **1 Envelope Vermelho por semana**, mesmo que vários dias da semana estejam habilitados.
+- O prêmio continua sendo uma porcentagem configurável sobre o total depositado na semana.
+- Não é necessária nova migration; a configuração existente `deposit_min_cents` passa a representar o mínimo semanal.
+
+## V21 — Roleta de Saque funcional
+
+- Implementada a **Roleta de Saque** como campanha de progresso separada da carteira principal.
+- O Admin configura uma única campanha com:
+  - meta para resgate;
+  - validade da sessão em dias;
+  - quantidade de rodadas gratuitas por dia;
+  - prêmio mínimo e máximo por giro;
+  - ajuda por indicação válida;
+  - rollover aplicado apenas no resgate final.
+- Cada giro aumenta somente o saldo interno da campanha. Nenhum giro individual credita CASH/BONUS diretamente.
+- O jogador só pode resgatar quando o progresso atingir 100% da meta configurada.
+- Indicações ativas feitas durante a sessão podem aumentar o progresso e cada indicado conta uma única vez por sessão.
+- Sessões vencidas são marcadas como expiradas e não liberam prêmio.
+- Adicionado histórico de giros e relatório administrativo das sessões.
+- A nova migration obrigatória é `030_cashwheel.sql`.
+
+### Atualização
+
+```bash
+php bin/migrate.php
+```
+
+Depois configure em **Admin → Promoções → Roleta de Saque** e ative a campanha após revisar os valores.
+
+### V21.2 — Roleta de Saque: progressão controlada
+- O saldo interno da Roleta de Saque **não é creditado na carteira antes da meta**.
+- Exceção: resultado específico `CASH_BONUS`, com chance e valores configuráveis no Admin.
+- Resultado `NO_WIN`: não acrescenta saldo e exibe "Não ganhou nada, tente novamente".
+- Primeiro giro de progresso: faixa configurável de 60% a 90% da meta (máximo 90%).
+- Giros seguintes: avanço menor, limitado por percentual configurável da meta.
+- Nova migration: `032_cashwheel_no_win.sql`.
+
+
+## V21.3 — Ajustes mobile e branding dinâmico
+- Corrigido o layout mobile do módulo **Roleta de Saque** com wheel, labels e botões responsivos.
+- Corrigido o layout mobile do módulo **Giro da Sorte** com wheel e textos adaptados para telas menores.
+- A barra do topo da área pública agora permanece **fixa** durante a rolagem.
+- O nome da bet no público e no admin agora usa como prioridade o **site_name** configurado em Aparência, evitando exibir o fallback antigo (ex.: NovaBet).
+- Ajustado o rótulo de perda da Roleta de Saque para uma versão mais curta no disco da roleta, preservando a mensagem completa no resultado.
+- Não há novas migrations nesta versão.
+
+
+## V21.4 — Correção definitiva mobile
+- Sincronizados os arquivos de `assets/` com `public/assets/`, evitando que o navegador carregue CSS/JS antigos.
+- Giro da Sorte e Roleta de Saque agora usam dimensões específicas para 390–560px e ficam centralizados no card.
+- Labels internas tiveram raio e fonte reduzidos para não invadir fatias vizinhas.
+- Header público passou a `position: fixed` com z-index elevado e compensação de altura no conteúdo, permanecendo visível durante toda a rolagem.
+- Atualizado cache-busting dos arquivos CSS/JS para V21.4.
+- Sem nova migration.
+
+## V21.5 — Alinhamento final da Roleta de Saque + header translúcido
+- Refinado o posicionamento dos textos da **Roleta de Saque**, com raios independentes para fatias de prêmio, “não ganhou” e “bônus em moeda”.
+- Reduzidos largura, altura e fonte dos labels no mobile para manter o conteúdo centralizado dentro de cada fatia.
+- Aplicado visual translúcido no **header fixo**, com blur e transparência semelhantes ao menu inferior.
+- Atualizado o cache-busting em `public/app.php` para forçar o carregamento do CSS/JS novos.
+- Sem nova migration.
+
+## V21.6 — Correção do centro das fatias da Roleta de Saque
+- Corrigido o posicionamento dos textos da **Roleta de Saque**.
+- O problema era o ângulo dos labels: eles estavam sendo posicionados na borda entre as fatias, e não no centro de cada segmento.
+- Ajustado o offset angular em **22.5°** em todos os breakpoints (desktop e mobile), mantendo os textos centralizados dentro de cada fatia.
+- Atualizado o versionamento estático em `public/app.php` para forçar recarga do CSS.
+- Sem migration.
+
+## V21.7 — Ajuste fino dos labels especiais da Roleta de Saque
+- Reposicionados os labels especiais **"Não ganhou nada"** e **"Bônus em moeda"** para ficarem mais para fora, melhor centralizados nas fatias.
+- Ajustado o raio desses dois labels no desktop e no mobile.
+- Mantido o alinhamento dos demais valores da roleta.
+- Atualizado o cache-buster dos assets em `public/app.php`.
+- Sem migration.

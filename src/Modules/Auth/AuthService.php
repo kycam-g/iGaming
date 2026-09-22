@@ -13,6 +13,7 @@ use App\Core\Support\Env;
 use App\Core\Support\BrazilIdentity;
 use App\Modules\Users\UserRepository;
 use App\Modules\Wallet\WalletService;
+use App\Modules\Platform\ReferralChestService;
 use DomainException;
 use PDO;
 use PDOException;
@@ -25,14 +26,14 @@ final class AuthService
         private AuditLogger $audit,
     ) {}
 
-    public function register(string $cpf, string $phone, string $password, ?string $ip = null): array
+    public function register(string $cpf, string $phone, string $password, ?string $ip = null, string $referralCode = ''): array
     {
         $cpf = BrazilIdentity::cpf($cpf);
         $phone = BrazilIdentity::phone($phone);
         $this->validateRegistration($password);
 
         try {
-            $userId = Database::transaction(function (PDO $pdo) use ($cpf, $phone, $password, $ip): string {
+            $userId = Database::transaction(function (PDO $pdo) use ($cpf, $phone, $password, $ip, $referralCode): string {
                 $collision = $pdo->prepare('SELECT id FROM users WHERE cpf = :cpf OR phone = :phone LIMIT 1');
                 $collision->execute(['cpf' => $cpf, 'phone' => $phone]);
                 if ($collision->fetch()) throw new ConflictException('CPF ou telefone já cadastrado.');
@@ -45,6 +46,7 @@ final class AuthService
                 $stmt->execute(['user_id' => $id, 'hash' => password_hash($password, $this->passwordAlgorithm())]);
 
                 $this->wallet->createForUser($id, $pdo);
+                ReferralChestService::bindOnRegistration($pdo, $id, $referralCode);
                 $this->audit->record('USER', $id, 'auth.register', 'user', $id, $ip, [], $pdo);
                 return $id;
             });

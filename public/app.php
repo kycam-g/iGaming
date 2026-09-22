@@ -5,7 +5,8 @@ declare(strict_types=1);
 use App\Core\Support\Env;
 
 $basePath = rtrim((string) Env::get('APP_BASE_PATH', ''), '/');
-$appName = (string) Env::get('APP_NAME', 'MZ90');
+$fallbackAppName = (string) Env::get('APP_NAME', 'MZ90');
+$siteName = (string) (($settings['site_name'] ?? '') !== '' ? $settings['site_name'] : $fallbackAppName);
 function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 'UTF-8'); }
 ?>
 <!doctype html>
@@ -15,15 +16,15 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#111416">
   <link rel="icon" id="browser-favicon" href="data:,">
-  <title><?= h($appName) ?></title>
+  <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-rules-v13-2">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-roleta-saque-labels-v21-7">
 </head>
 <body>
 <div class="mobile-stage">
   <div id="mz-drawer-backdrop" class="mz-drawer-backdrop hidden" aria-hidden="true"></div>
   <aside id="mz-home-drawer" class="mz-home-drawer" role="dialog" aria-modal="true" aria-label="Menu lateral" aria-hidden="true" inert tabindex="-1">
-    <div class="mz-drawer-header"><strong><?= h($appName) ?></strong><button type="button" id="mz-drawer-close" aria-label="Fechar menu">×</button></div>
+    <div class="mz-drawer-header"><div class="mz-drawer-brand"><img id="drawer-site-logo" class="drawer-site-logo hidden" alt="<?= h($siteName) ?>"><strong id="drawer-brand-name"><?= h($siteName) ?></strong></div><button type="button" id="mz-drawer-close" aria-label="Fechar menu">×</button></div>
     <div class="mz-drawer-scroll">
       <h2 class="mz-drawer-heading">Promoções</h2>
       <div class="mz-drawer-grid">
@@ -33,11 +34,9 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
         <button type="button" class="mz-drawer-tile" data-drawer-promo="coupons"><span class="mz-drawer-icon" aria-hidden="true">▤</span><span>Troca</span></button>
         <button type="button" class="mz-drawer-tile" data-drawer-promo="checkin"><span class="mz-drawer-icon" aria-hidden="true">♛</span><span>Nível / Check-in</span></button>
         <button type="button" class="mz-drawer-tile" data-drawer-promo="rescue"><span class="mz-drawer-icon" aria-hidden="true">✧</span><span>Resgatar</span></button>
-        <button type="button" class="mz-drawer-tile" data-drawer-promo="weekly"><span class="mz-drawer-icon" aria-hidden="true">◷</span><span>Semana</span></button>
         <button type="button" class="mz-drawer-tile" data-drawer-promo="vip"><span class="mz-drawer-icon" aria-hidden="true">♕</span><span>VIP</span></button>
         <button type="button" class="mz-drawer-tile" data-drawer-promo="cashwheel"><span class="mz-drawer-icon" aria-hidden="true">◉</span><span>Roleta de Saque</span></button>
-        <button type="button" class="mz-drawer-tile" data-drawer-promo="roulette"><span class="mz-drawer-icon" aria-hidden="true">◎</span><span>Boas-vindas</span></button>
-        <button type="button" class="mz-drawer-tile" data-drawer-promo="envelope"><span class="mz-drawer-icon" aria-hidden="true">✉</span><span>Envelope Vermelho</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="roulette"><span class="mz-drawer-icon" aria-hidden="true">◎</span><span>Giro da Sorte</span></button>
         <button type="button" class="mz-drawer-tile" data-drawer-promo="lottery"><span class="mz-drawer-icon" aria-hidden="true">✦</span><span>Sorteio</span></button>
       </div>
       <h2 class="mz-drawer-heading mz-drawer-separator">Sua conta</h2>
@@ -52,9 +51,9 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <header class="app-header">
     <button type="button" id="mz-drawer-toggle" class="mz-drawer-toggle" aria-label="Abrir menu lateral" aria-controls="mz-home-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h12M4 18h16"/></svg></button>
     <button class="brand-lockup" data-section="home" aria-label="Início">
-      <img id="header-site-logo" class="header-site-logo hidden" alt="<?= h($appName) ?>" width="166" height="58">
+      <img id="header-site-logo" class="header-site-logo hidden" alt="<?= h($siteName) ?>" width="166" height="58">
       <span class="brand-round">M</span>
-      <span class="brand-text"><b><?= h($appName) ?></b><small>CASINO</small></span>
+      <span class="brand-text"><b><?= h($siteName) ?></b><small>CASINO</small></span>
     </button>
     <div id="guest-actions" class="header-actions">
       <button class="login-link" data-open-auth="login">Entrar</button>
@@ -157,13 +156,13 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 
   <footer id="platform-footer" class="platform-footer" aria-label="Rodapé da plataforma">
     <div class="footer-content">
-      <div class="footer-brand"><img id="footer-logo" class="footer-logo hidden" alt="Logo da plataforma"><strong id="footer-brand-name"><?= h($appName) ?></strong></div>
+      <div class="footer-brand"><img id="footer-logo" class="footer-logo hidden" alt="Logo da plataforma"><strong id="footer-brand-name"><?= h($siteName) ?></strong></div>
       <p id="footer-about" class="footer-about"></p>
       <div class="footer-contact-grid">
         <section class="footer-contact-section"><strong>Fale conosco</strong><div id="footer-contact" class="footer-links" aria-label="Canais de atendimento"></div><div id="footer-socials" class="footer-socials" aria-label="Redes sociais oficiais"></div></section>
         <section class="footer-info-section"><strong>Informações</strong><p><span class="footer-age" aria-label="Maiores de 18 anos">18+</span> Jogue com responsabilidade.</p></section>
       </div>
-      <div class="footer-bottom"><div id="footer-copy" aria-label="Direitos autorais"><span>© <?= date('Y') ?> <?= h($appName) ?>.</span><span>Todos os direitos reservados.</span></div></div>
+      <div class="footer-bottom"><div id="footer-copy" aria-label="Direitos autorais"><span>© <?= date('Y') ?> <?= h($siteName) ?>.</span><span>Todos os direitos reservados.</span></div></div>
     </div>
   </footer>
 
@@ -179,7 +178,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="modal-backdrop hidden" id="auth-modal" role="dialog" aria-modal="true">
   <div class="auth-modal">
     <button class="modal-close" id="close-auth">×</button>
-    <div class="auth-brand"><span class="brand-round">M</span><div><strong><?= h($appName) ?></strong><small>CASINO</small></div></div>
+    <div class="auth-brand"><span class="brand-round">M</span><div><strong><?= h($siteName) ?></strong><small>CASINO</small></div></div>
     <div class="auth-tabs"><button data-auth-tab="login" class="active">Entrar</button><button data-auth-tab="register">Criar conta</button></div>
     <div class="alert hidden" id="auth-alert"></div>
     <form id="login-form" class="auth-form"><label>CPF, telefone ou e-mail<input type="text" name="identifier" autocomplete="username" required placeholder="Digite seu CPF, celular ou e-mail"></label><label>Senha<input type="password" name="password" autocomplete="current-password" required></label><button class="gold-btn full" type="submit">ENTRAR</button></form>
@@ -210,10 +209,10 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 
 
 <div class="toast-stack" id="toast-stack"></div>
-<script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$appName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
+<script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-rules-v13-2"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-rules-v13-2" defer></script>
-<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-menu-tema-v9" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-roleta-saque-labels-v21-7"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-roleta-saque-labels-v21-7" defer></script>
+<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-roleta-saque-labels-v21-7" defer></script>
 </body>
 </html>

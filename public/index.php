@@ -29,7 +29,14 @@ use App\Modules\Wallet\WalletService;
 use App\Modules\Platform\PlatformService;
 use App\Modules\Platform\PromotionConfigService;
 use App\Modules\Platform\PromotionRedemptionService;
+use App\Modules\Platform\ReferralChestService;
 use App\Modules\Platform\VipBenefitService;
+use App\Modules\Platform\AgencyService;
+use App\Modules\Platform\RebateService;
+use App\Modules\Platform\RescueService;
+use App\Modules\Platform\WelcomeRouletteService;
+use App\Modules\Platform\RedEnvelopeService;
+use App\Modules\Platform\CashWheelService;
 
 Env::load(dirname(__DIR__) . '/.env');
 $router = new Router();
@@ -50,7 +57,14 @@ $playfiverGames = new PlayfiverGameService($playfiverConfig, $wallet, $users);
 $platform = new PlatformService();
 $promotionConfigs = new PromotionConfigService();
 $promotionRedemptions = new PromotionRedemptionService();
+$referralChests = new ReferralChestService();
 $vipBenefits = new VipBenefitService();
+$agency = new AgencyService();
+$rebate = new RebateService();
+$rescue = new RescueService();
+$welcomeRoulette = new WelcomeRouletteService();
+$redEnvelope = new RedEnvelopeService();
+$cashWheel = new CashWheelService();
 
 $router->get('/health', fn() => ['status' => 'ok', 'service' => 'igaming-php']);
 
@@ -61,7 +75,8 @@ $frontend = function (Request $request) use ($analytics,$platform): never {
     $analytics->recordPublicVisit($request);
     ob_start(); require __DIR__ . '/app.php'; Response::html((string) ob_get_clean());
 };
-$adminFrontend = function (): never {
+$adminFrontend = function () use ($platform): never {
+    $settings=$platform->settings();
     ob_start(); require __DIR__ . '/admin.php'; Response::html((string) ob_get_clean());
 };
 
@@ -82,6 +97,33 @@ $router->post('/admin/api/platform/announcements/save',function(Request $request
 $router->post('/admin/api/platform/announcements/delete',function(Request $request) use($adminAuth,$platform,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$id=(int)($request->body['id']??0);$platform->deleteAnnouncement($id);$audit->record('ADMIN',(string)$admin['id'],'platform.announcement_deleted','platform_announcements',(string)$id,$request->clientIp());return ['ok'=>true];});
 // Configuração administrativa isolada dos fluxos de carteira / pagamentos.
 $router->get('/api/promotions/configs',fn() => ['items'=>$promotionConfigs->publicList()]);
+$router->get('/api/promotions/roulette/status',function(Request $request)use($auth,$welcomeRoulette){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $welcomeRoulette->status((string)$user['id']);});
+$router->post('/api/promotions/roulette/spin',function(Request $request)use($auth,$welcomeRoulette){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $welcomeRoulette->spin((string)$user['id'],(int)($request->body['campaign_id']??0));});
+$router->get('/admin/api/promotions/roulette/report',function(Request $request)use($adminAuth,$welcomeRoulette){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $welcomeRoulette->report();});
+$router->get('/api/promotions/cashwheel/status',function(Request $request)use($auth,$cashWheel){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $cashWheel->status((string)$user['id']);});
+$router->post('/api/promotions/cashwheel/spin',function(Request $request)use($auth,$cashWheel){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $cashWheel->spin((string)$user['id']);});
+$router->post('/api/promotions/cashwheel/claim',function(Request $request)use($auth,$cashWheel){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $cashWheel->claim((string)$user['id']);});
+$router->get('/admin/api/promotions/cashwheel/report',function(Request $request)use($adminAuth,$cashWheel){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $cashWheel->report();});
+$router->get('/api/promotions/envelope/status',function(Request $request)use($auth,$redEnvelope){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $redEnvelope->status((string)$user['id']);});
+$router->post('/api/promotions/envelope/claim',function(Request $request)use($auth,$redEnvelope){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $redEnvelope->claim((string)$user['id']);});
+$router->get('/admin/api/promotions/envelope/report',function(Request $request)use($adminAuth,$redEnvelope){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $redEnvelope->report();});
+$router->get('/api/promotions/chests/status',function(Request $request)use($auth,$referralChests){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $referralChests->status((string)$user['id']);});
+$router->post('/api/promotions/chests/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimChest((string)$user['id'],(int)($request->body['campaign_id']??0))];});
+$router->get('/admin/api/promotions/chests/report',function(Request $request)use($adminAuth,$referralChests){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $referralChests->adminReport();});
+$router->get('/api/promotions/agency/status',function(Request $request)use($auth,$agency){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $agency->status((string)$user['id']);});
+$router->get('/admin/api/promotions/agency/settings',function(Request $request)use($adminAuth,$agency){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['settings'=>$agency->adminSettings()];});
+$router->post('/admin/api/promotions/agency/settings',function(Request $request)use($adminAuth,$agency,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$enabled=filter_var($request->body['enabled']??false,FILTER_VALIDATE_BOOLEAN);$settings=$agency->saveSettings($enabled);$audit->record('ADMIN',(string)$admin['id'],'agency.settings_updated','agency','settings',$request->clientIp(),['enabled'=>$enabled]);return ['settings'=>$settings];});
+$router->get('/admin/api/promotions/agency/report',function(Request $request)use($adminAuth,$agency){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $agency->report();});
+$router->get('/api/promotions/rebate/status',function(Request $request)use($auth,$rebate){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $rebate->status((string)$user['id']);});
+$router->post('/api/promotions/rebate/redeem',function(Request $request)use($auth,$rebate){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$rebate->claim((string)$user['id'])];});
+$router->get('/admin/api/promotions/rebate/settings',function(Request $request)use($adminAuth,$rebate){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['settings'=>$rebate->adminSettings()];});
+$router->post('/admin/api/promotions/rebate/settings',function(Request $request)use($adminAuth,$rebate,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$settings=$rebate->saveSettings(filter_var($request->body['enabled']??false,FILTER_VALIDATE_BOOLEAN),(int)($request->body['min_claim_minor']??100),(int)($request->body['rate_basis_points']??0));$audit->record('ADMIN',(string)$admin['id'],'rebate.settings_updated','rebate','settings',$request->clientIp(),$settings);return ['settings'=>$settings];});
+$router->get('/api/promotions/rescue/status',function(Request $request)use($auth,$rescue){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $rescue->status((string)$user['id']);});
+$router->post('/api/promotions/rescue/redeem',function(Request $request)use($auth,$rescue){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$rescue->claim((string)$user['id'])];});
+$router->get('/admin/api/promotions/rescue/settings',function(Request $request)use($adminAuth,$rescue){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['settings'=>$rescue->adminSettings()];});
+$router->post('/admin/api/promotions/rescue/settings',function(Request $request)use($adminAuth,$rescue,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$settings=$rescue->saveSettings(filter_var($request->body['enabled']??false,FILTER_VALIDATE_BOOLEAN));$audit->record('ADMIN',(string)$admin['id'],'rescue.settings_updated','rescue','settings',$request->clientIp(),$settings);return ['settings'=>$settings];});
+$router->get('/admin/api/promotions/rescue/report',function(Request $request)use($adminAuth,$rescue){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $rescue->report();});
+$router->get('/admin/api/promotions/rebate/report',function(Request $request)use($adminAuth,$rebate){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $rebate->report();});
 $router->get('/api/promotions/status',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $promotionRedemptions->status((string)$user['id']);});
 $router->get('/api/promotions/vip/status',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $promotionRedemptions->vipStatus((string)$user['id']);});
 $router->get('/api/promotions/vip/benefits',function(Request $request)use($auth,$vipBenefits){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $vipBenefits->status((string)$user['id']);});
@@ -102,7 +144,7 @@ $router->post('/admin/api/platform/upload',function(Request $request) use($admin
 
 
 $router->post('/api/auth/register', function (Request $request) use ($auth) {
-    return $auth->register((string)($request->body['cpf']??''),(string)($request->body['phone']??''),(string)($request->body['password']??''),$request->clientIp());
+    return $auth->register((string)($request->body['cpf']??''),(string)($request->body['phone']??''),(string)($request->body['password']??''), $request->clientIp(),(string)($request->body['referral_code']??''));
 });
 $router->post('/api/auth/login', function (Request $request) use ($auth) {
     return $auth->login((string)($request->body['identifier']??$request->body['email']??''),(string)($request->body['password']??''),$request->clientIp());

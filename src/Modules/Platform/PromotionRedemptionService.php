@@ -94,6 +94,33 @@ final class PromotionRedemptionService
         return $this->award($db,$userId,$row,$cfg,$type,null,null);
     }
 
+    /** O consumo da rodada, o prêmio e o ledger pertencem à mesma transação. */
+    public function creditRoulette(PDO $db,string $userId,array $campaign,array $config):array {
+        if(($campaign['type']??'')!=='roulette')throw new DomainException('Campanha de roleta inválida.');
+        return $this->award($db,$userId,$campaign,$config,'roulette',null,null);
+    }
+
+
+    /** Crédito da Roleta de Saque somente após atingir a meta interna da campanha. */
+    public function creditCashwheel(PDO $db,string $userId,array $campaign,array $config,int $amountMinor):array {
+        if(($campaign['type']??'')!=='cashwheel')throw new DomainException('Campanha de Roleta de Saque inválida.');
+        $config['forced_reward_cents']=$amountMinor;
+        return $this->award($db,$userId,$campaign,$config,'cashwheel',null,null);
+    }
+
+    /** Crédito do Envelope Vermelho após o entitlement diário ser reservado. */
+    public function creditEnvelope(PDO $db,string $userId,array $campaign,array $config,int $amountMinor):array {
+        if(($campaign['type']??'')!=='envelope')throw new DomainException('Campanha de envelope inválida.');
+        $config['forced_reward_cents']=$amountMinor;
+        return $this->award($db,$userId,$campaign,$config,'envelope',null,null);
+    }
+
+    /** Usado somente após travar usuário e entitlement diário em transação atômica. */
+    public function creditRescue(PDO $db,string $userId,array $campaign,array $config):array {
+        if(($campaign['type']??'')!=='rescue')throw new DomainException('Campanha de resgate inválida.');
+        return $this->award($db,$userId,$campaign,$config,'rescue',null,null);
+    }
+
     private function throttleCoupon(string $userId):void {
         Database::transaction(function(PDO $db)use($userId):void {
             $db->prepare('INSERT IGNORE INTO promotion_coupon_attempts(user_id,window_started_at,attempts) VALUES (?,NOW(6),0)')->execute([$userId]);
@@ -102,6 +129,25 @@ final class PromotionRedemptionService
             if((bool)$expired->fetchColumn()){$stmt=$db->prepare('UPDATE promotion_coupon_attempts SET window_started_at=NOW(6),attempts=1 WHERE user_id=?');$stmt->execute([$userId]);return;}
             if((int)$old['attempts']>=10)throw new DomainException('Limite de tentativas atingido. Aguarde uma hora.');
             $stmt=$db->prepare('UPDATE promotion_coupon_attempts SET attempts=attempts+1 WHERE user_id=?');$stmt->execute([$userId]);
+        });
+    }
+    /** Marco único por campanha; só depósitos PAID de contas indicadas ativas qualificam. */
+    public function claimChest(string $userId,int $campaignId):array {
+        if($campaignId<1)throw new DomainException('Baú inválido.');
+        return Database::transaction(function(PDO $db)use($userId,$campaignId):array {
+            $this->lockUser($db,$userId);
+            $stmt=$db->prepare("SELECT * FROM promotion_configurations WHERE id=? AND type='chests' AND enabled=1 FOR UPDATE");
+            $stmt->execute([$campaignId]);$row=$stmt->fetch();
+            if(!$row)throw new DomainException('Baú indisponível.');
+            $cfg=json_decode((string)$row['config'],true)?:[];
+            $required=(int)($cfg['referral_count']??0);$minimum=(int)($cfg['referred_deposit_min_cents']??0);
+            if($required<1||$minimum<1||(int)($cfg['bonus_cents']??0)<1)throw new DomainException('Configure meta, depósito mínimo e bônus no Admin.');
+            $old=$db->prepare("SELECT id FROM promotion_redemptions WHERE user_id=? AND campaign_id=? AND promotion_type='chests' LIMIT 1");$old->execute([$userId,$campaignId]);
+            if($old->fetchColumn())throw new DomainException('Este baú já foi resgatado.');
+            $stmt=$db->prepare("SELECT COUNT(*) FROM (SELECT pr.referred_user_id FROM player_referrals pr JOIN users u ON u.id=pr.referred_user_id AND u.status='ACTIVE' JOIN payment_transactions pt ON pt.user_id=pr.referred_user_id AND pt.kind='DEPOSIT' AND pt.status='PAID' AND pt.created_at>=pr.created_at WHERE pr.referrer_user_id=? GROUP BY pr.referred_user_id HAVING SUM(pt.amount_minor)>=?) qualified");
+            $stmt->execute([$userId,$minimum]);
+            if((int)$stmt->fetchColumn()<$required)throw new DomainException('Ainda não há indicados com depósito confirmado suficientes para este baú.');
+            return $this->award($db,$userId,$row,$cfg,'chests',null,null);
         });
     }
     public function claimCoupon(string $userId,string $code): array {
@@ -154,7 +200,7 @@ final class PromotionRedemptionService
         });
     }
     public function adminHistory(string $type): array {
-        if($type!=='' && !in_array($type,['coupons','checkin','vip','vip_daily','vip_weekly','vip_monthly'],true))throw new DomainException('Tipo inválido.');
+        if($type!=='' && !in_array($type,['coupons','checkin','chests','vip','vip_daily','vip_weekly','vip_monthly'],true))throw new DomainException('Tipo inválido.');
         $db=Database::connection();
         $where=$type!==''?' WHERE r.promotion_type=?':'';
         $stmt=$db->prepare('SELECT r.id,r.user_id,u.username,r.promotion_type,r.day_key,r.sequence_day,r.amount_minor,r.rollover_x,r.wager_required_minor,r.wager_progress_minor,r.status,r.created_at,c.title FROM promotion_redemptions r JOIN users u ON u.id=r.user_id JOIN promotion_configurations c ON c.id=r.campaign_id'.$where.' ORDER BY r.created_at DESC LIMIT 100');
@@ -206,22 +252,30 @@ final class PromotionRedemptionService
         if($stmt->fetchColumn()!=='ACTIVE')throw new DomainException('Conta não está ativa.');
     }
     private function award(PDO $db,string $userId,array $row,array $cfg,string $type,?string $day,?int $sequence):array {
-        $min=(int)($cfg[$type==='coupons'?'bonus_min_cents':(str_starts_with($type,'vip')?'bonus_cents':'reward_min_cents')]??0);
-        $max=str_starts_with($type,'vip')?$min:(int)($cfg[$type==='coupons'?'bonus_max_cents':'reward_max_cents']??0);
+        $fixedBonus=($type==='chests'||str_starts_with($type,'vip'));
+        $min=(int)($cfg[$type==='coupons'?'bonus_min_cents':($fixedBonus?'bonus_cents':'reward_min_cents')]??0);
+        $max=$fixedBonus?$min:(int)($cfg[$type==='coupons'?'bonus_max_cents':'reward_max_cents']??0);
         if($min<0 || $max<$min || $max>100000000)throw new DomainException('Valores da recompensa inválidos no Admin.');
-        $value=$type==='checkin' && empty($cfg['random_reward']) ? $min : ($max===$min?$min:random_int($min,$max));
+        if(array_key_exists('forced_reward_cents',$cfg)){
+            $value=(int)$cfg['forced_reward_cents'];
+        }else{
+            $value=$type==='checkin' && empty($cfg['random_reward']) ? $min : ($max===$min?$min:random_int($min,$max));
+        }
         if($type==='checkin')$value+=(int)($cfg['extra_cents']??0);
-        if($value<1 || $value>100000000)throw new DomainException('Recompensa indisponível: configure um valor positivo.');
-        $rollover=(float)($cfg['rollover_x']??0);
+        if($value<0 || $value>100000000)throw new DomainException('Recompensa indisponível: configure um valor válido.');
+        $rollover=$value>0?(float)($cfg['rollover_x']??0):0.0;
         if($rollover<0 || $rollover>100)throw new DomainException('Rollover inválido no Admin.');
         $required=(int)ceil($value*$rollover);
+        $status=$required>0?'LOCKED':'COMPLETED';
         $id=self::uuid();
         $stmt=$db->prepare('INSERT INTO promotion_redemptions (id,user_id,campaign_id,coupon_campaign_id,promotion_type,day_key,sequence_day,amount_minor,rollover_x,wager_required_minor,status) VALUES (?,?,?,?,?,?,?,?,?,?,?)');
-        $stmt->execute([$id,$userId,$row['id'],$type==='coupons'?$row['id']:null,$type,$day,$sequence,$value,$rollover,$required,$required>0?'LOCKED':'COMPLETED']);
-        // Saldo sem rollover é sacável; bônus com rollover fica isolado na conta BONUS.
-        $transaction=$this->ledgerCredit($db,$userId,$required>0?'BONUS':'CASH',$value,'PROMOTION_'.$type,$id,'promotion:'.$id);
-        $stmt=$db->prepare('UPDATE promotion_redemptions SET financial_transaction_id=? WHERE id=?');$stmt->execute([$transaction,$id]);
-        return ['id'=>$id,'type'=>$type,'amount_minor'=>$value,'rollover_x'=>$rollover,'wager_required_minor'=>$required,'status'=>$required>0?'LOCKED':'COMPLETED','account_type'=>$required>0?'BONUS':'CASH'];
+        $stmt->execute([$id,$userId,$row['id'],$type==='coupons'?$row['id']:null,$type,$day,$sequence,$value,$rollover,$required,$status]);
+        if($value>0){
+            // Saldo sem rollover é sacável; bônus com rollover fica isolado na conta BONUS.
+            $transaction=$this->ledgerCredit($db,$userId,$required>0?'BONUS':'CASH',$value,'PROMOTION_'.$type,$id,'promotion:'.$id);
+            $stmt=$db->prepare('UPDATE promotion_redemptions SET financial_transaction_id=? WHERE id=?');$stmt->execute([$transaction,$id]);
+        }
+        return ['id'=>$id,'type'=>$type,'amount_minor'=>$value,'rollover_x'=>$rollover,'wager_required_minor'=>$required,'status'=>$status,'account_type'=>$value>0?($required>0?'BONUS':'CASH'):null];
     }
     private function ledgerCredit(PDO $db,string $userId,string $accountType,int $amount,string $type,string $ref,string $idem): string {
         $stmt=$db->prepare('SELECT wa.id,wa.balance_minor FROM wallet_accounts wa JOIN wallets w ON w.id=wa.wallet_id WHERE w.user_id=? AND wa.type=? FOR UPDATE');$stmt->execute([$userId,$accountType]);$account=$stmt->fetch();
