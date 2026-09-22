@@ -9,6 +9,9 @@ use App\Core\Support\Env;
 
 Env::load(dirname(__DIR__) . '/.env');
 $pdo = Database::connection();
+// Migration SQL includes dynamic prepared statements; buffer any result sets.
+// This affects only the migration CLI connection, not application traffic.
+$pdo->setAttribute(PDO::MYSQL_ATTR_USE_BUFFERED_QUERY, true);
 $pdo->exec(
     'CREATE TABLE IF NOT EXISTS schema_migrations ('
     . 'migration VARCHAR(190) PRIMARY KEY, '
@@ -40,7 +43,18 @@ foreach ($files as $file) {
             if ($statement === '') {
                 continue;
             }
-            $pdo->exec($statement);
+            // EXECUTE of a prepared statement may produce a result set; exec()
+            // cannot close its cursor. query() lets us consume and close it.
+            $cursor = $pdo->query($statement);
+            try {
+                do {
+                    while ($cursor->fetch(PDO::FETCH_NUM) !== false) {
+                        // Discard result rows (e.g. from a migration guard).
+                    }
+                } while ($cursor->nextRowset());
+            } finally {
+                $cursor->closeCursor();
+            }
         }
 
         $stmt = $pdo->prepare('INSERT INTO schema_migrations (migration) VALUES (:migration)');

@@ -334,3 +334,17 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
 
 /* V12.12 — integração PlayFiver */
 .playfiver-callback-box{margin-top:18px;padding:14px 16px;border:1px solid #313941;border-radius:10px;background:#11161a;display:grid;gap:7px}.playfiver-callback-box strong{color:#f3f6f8}.playfiver-callback-box code{display:block;overflow-wrap:anywhere;color:#ff7a70;background:#1a2025;border:1px solid #303840;border-radius:7px;padding:10px 12px}.playfiver-callback-box small{color:#9da8b2;line-height:1.45}
+
+/* Submenu real de Promoções no menu lateral administrativo. */
+.sidebar .promotion-admin-group{display:grid;gap:3px}
+.sidebar .promotion-admin-parent{display:flex!important;align-items:center;gap:8px}
+.sidebar .promotion-admin-parent .casino-nav-chevron{margin-left:auto;transition:transform .2s}
+.sidebar .promotion-admin-group.collapsed .promotion-admin-subnav{display:none!important}
+.sidebar .promotion-admin-group.collapsed .casino-nav-chevron{transform:rotate(-90deg)}
+.sidebar .promotion-admin-subnav{display:grid!important;gap:2px;margin:0 0 4px 18px;padding:0 0 3px 15px;border-left:1px solid #303436}
+.sidebar .promotion-admin-subitem{width:100%;min-height:36px;border:0;border-radius:7px;background:transparent;color:#bac0c6;text-align:left;padding:8px 10px;font-size:12px;font-weight:650;cursor:pointer}
+.sidebar .promotion-admin-subitem:hover,.sidebar .promotion-admin-subitem.active{background:#30201d;color:#ff965b}
+.sidebar .promotion-admin-parent[aria-expanded=true]{color:#ff5353!important}
+
+/* CRUD das configurações de Promoções (somente admin). */
+.promotion-manager-head{display:flex;justify-content:space-between;gap:18px;align-items:center;margin-bottom:22px}.promotion-manager-head h2{margin:0 0 8px}.promotion-config-note{margin-top:16px}.promotion-config-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:16px 0}.promotion-config-actions,.promotion-row-actions{display:flex;gap:8px;align-items:center}.promotion-row-actions button{white-space:nowrap;padding:9px 12px}.promotion-empty{text-align:center;padding:25px}.promotion-manager-head button{white-space:nowrap}@media(max-width:750px){.promotion-config-fields{grid-template-columns:1fr}.promotion-manager-head{align-items:flex-start;flex-direction:column}.promotion-row-actions{flex-wrap:wrap}}

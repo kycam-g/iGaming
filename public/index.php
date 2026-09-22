@@ -27,6 +27,9 @@ use App\Modules\Payments\PaymentService;
 use App\Modules\Users\UserRepository;
 use App\Modules\Wallet\WalletService;
 use App\Modules\Platform\PlatformService;
+use App\Modules\Platform\PromotionConfigService;
+use App\Modules\Platform\PromotionRedemptionService;
+use App\Modules\Platform\VipBenefitService;
 
 Env::load(dirname(__DIR__) . '/.env');
 $router = new Router();
@@ -45,6 +48,9 @@ $casino = new CasinoCatalogService();
 $playfiverConfig = new PlayfiverConfigService(new SecretBox());
 $playfiverGames = new PlayfiverGameService($playfiverConfig, $wallet, $users);
 $platform = new PlatformService();
+$promotionConfigs = new PromotionConfigService();
+$promotionRedemptions = new PromotionRedemptionService();
+$vipBenefits = new VipBenefitService();
 
 $router->get('/health', fn() => ['status' => 'ok', 'service' => 'igaming-php']);
 
@@ -74,6 +80,23 @@ $router->post('/admin/api/platform/promotions/delete',function(Request $request)
 $router->post('/admin/api/platform/banners/delete',function(Request $request) use($adminAuth,$platform,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$id=(int)($request->body['id']??0);$platform->delete('banners',$id);$audit->record('ADMIN',(string)$admin['id'],'platform.banners_deleted','banners',(string)$id,$request->clientIp(),['id'=>$id]);return ['ok'=>true];});
 $router->post('/admin/api/platform/announcements/save',function(Request $request) use($adminAuth,$platform,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$result=$platform->saveAnnouncement($request->body);$audit->record('ADMIN',(string)$admin['id'],'platform.announcement_saved','platform_announcements',(string)$result['id'],$request->clientIp());return $result;});
 $router->post('/admin/api/platform/announcements/delete',function(Request $request) use($adminAuth,$platform,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$id=(int)($request->body['id']??0);$platform->deleteAnnouncement($id);$audit->record('ADMIN',(string)$admin['id'],'platform.announcement_deleted','platform_announcements',(string)$id,$request->clientIp());return ['ok'=>true];});
+// Configuração administrativa isolada dos fluxos de carteira / pagamentos.
+$router->get('/api/promotions/configs',fn() => ['items'=>$promotionConfigs->publicList()]);
+$router->get('/api/promotions/status',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $promotionRedemptions->status((string)$user['id']);});
+$router->get('/api/promotions/vip/status',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $promotionRedemptions->vipStatus((string)$user['id']);});
+$router->get('/api/promotions/vip/benefits',function(Request $request)use($auth,$vipBenefits){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $vipBenefits->status((string)$user['id']);});
+$router->post('/api/promotions/vip/benefits/redeem',function(Request $request)use($auth,$vipBenefits){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$vipBenefits->claim((string)$user['id'],(string)($request->body['kind']??''))];});
+$router->get('/admin/api/promotions/vip/settings',function(Request $request)use($adminAuth,$vipBenefits){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['settings'=>$vipBenefits->adminSettings()];});
+$router->post('/admin/api/promotions/vip/settings',function(Request $request)use($adminAuth,$vipBenefits,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$settings=$vipBenefits->saveSettings($request->body);$audit->record('ADMIN',(string)$admin['id'],'vip.settings_updated','vip','settings',$request->clientIp(),$settings);return ['settings'=>$settings];});
+$router->get('/admin/api/promotions/vip/reviews',function(Request $request)use($adminAuth,$vipBenefits){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$vipBenefits->history()];});
+$router->post('/api/promotions/vip/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimVip((string)$user['id'],(int)($request->body['campaign_id']??0))];});
+$router->post('/api/promotions/coupons/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimCoupon((string)$user['id'],(string)($request->body['code']??''))];});
+$router->post('/api/promotions/checkin/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimCheckin((string)$user['id'])];});
+$router->get('/admin/api/promotions/redemptions',function(Request $request)use($adminAuth,$promotionRedemptions){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$promotionRedemptions->adminHistory((string)($request->query['type']??''))];});
+
+$router->get('/admin/api/promotion-configs',function(Request $request) use($adminAuth,$promotionConfigs){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$promotionConfigs->list((string)($request->query['type']??''))];});
+$router->post('/admin/api/promotion-configs/save',function(Request $request) use($adminAuth,$promotionConfigs,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$type=(string)($request->body['type']??'');$result=$promotionConfigs->save($type,$request->body);$audit->record('ADMIN',(string)$admin['id'],'promotion.configuration_saved',$type,(string)$result['id'],$request->clientIp());return $result;});
+$router->post('/admin/api/promotion-configs/delete',function(Request $request) use($adminAuth,$promotionConfigs,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$type=(string)($request->body['type']??'');$id=(int)($request->body['id']??0);$promotionConfigs->delete($type,$id);$audit->record('ADMIN',(string)$admin['id'],'promotion.configuration_deleted',$type,(string)$id,$request->clientIp());return ['ok'=>true];});
 $router->get('/admin/api/platform/audit',function(Request $request) use($adminAuth,$platform){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$platform->audits($request->query)];});
 $router->post('/admin/api/platform/upload',function(Request $request) use($adminAuth,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$kind=(string)($_POST['kind']??'');if(!in_array($kind,['banners','promotions','identity','providers'],true))Response::json(['error'=>'invalid_kind'],422);$file=$_FILES['image']??null;if(!$file||$file['error']!==UPLOAD_ERR_OK||$file['size']>2097152)Response::json(['error'=>'invalid_file'],422);$mime=(new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);$ext=match($mime){'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp',default=>null};if(!$ext||!getimagesize($file['tmp_name']))Response::json(['error'=>'invalid_image'],422);$dir=__DIR__.'/uploads/'.$kind;if(!is_dir($dir)&&!mkdir($dir,0755,true)&&!is_dir($dir))Response::json(['error'=>'upload_failed'],500);$name=bin2hex(random_bytes(16)).'.'.$ext;if(!move_uploaded_file($file['tmp_name'],$dir.'/'.$name))Response::json(['error'=>'upload_failed'],500);$audit->record('ADMIN',(string)$admin['id'],'platform.image_uploaded',$kind,$name,$request->clientIp());return ['path'=>'/uploads/'.$kind.'/'.$name];});
 

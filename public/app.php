@@ -17,11 +17,40 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($appName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260917-v12-14-playfiver-local-catalog">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-rules-v13-2">
 </head>
 <body>
 <div class="mobile-stage">
+  <div id="mz-drawer-backdrop" class="mz-drawer-backdrop hidden" aria-hidden="true"></div>
+  <aside id="mz-home-drawer" class="mz-home-drawer" role="dialog" aria-modal="true" aria-label="Menu lateral" aria-hidden="true" inert tabindex="-1">
+    <div class="mz-drawer-header"><strong><?= h($appName) ?></strong><button type="button" id="mz-drawer-close" aria-label="Fechar menu">×</button></div>
+    <div class="mz-drawer-scroll">
+      <h2 class="mz-drawer-heading">Promoções</h2>
+      <div class="mz-drawer-grid">
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="chests"><span class="mz-drawer-icon" aria-hidden="true">▣</span><span>Baú do Tesouro</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="rebate"><span class="mz-drawer-icon" aria-hidden="true">↺</span><span>Rebate</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="agency"><span class="mz-drawer-icon" aria-hidden="true">♧</span><span>Agente</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="coupons"><span class="mz-drawer-icon" aria-hidden="true">▤</span><span>Troca</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="checkin"><span class="mz-drawer-icon" aria-hidden="true">♛</span><span>Nível / Check-in</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="rescue"><span class="mz-drawer-icon" aria-hidden="true">✧</span><span>Resgatar</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="weekly"><span class="mz-drawer-icon" aria-hidden="true">◷</span><span>Semana</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="vip"><span class="mz-drawer-icon" aria-hidden="true">♕</span><span>VIP</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="cashwheel"><span class="mz-drawer-icon" aria-hidden="true">◉</span><span>Roleta de Saque</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="roulette"><span class="mz-drawer-icon" aria-hidden="true">◎</span><span>Boas-vindas</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="envelope"><span class="mz-drawer-icon" aria-hidden="true">✉</span><span>Envelope Vermelho</span></button>
+        <button type="button" class="mz-drawer-tile" data-drawer-promo="lottery"><span class="mz-drawer-icon" aria-hidden="true">✦</span><span>Sorteio</span></button>
+      </div>
+      <h2 class="mz-drawer-heading mz-drawer-separator">Sua conta</h2>
+      <div class="mz-drawer-links">
+        <button type="button" data-drawer-section="profile">☻ &nbsp; Meu perfil</button>
+        <button type="button" data-drawer-section="invite">♧ &nbsp; Convidar amigos</button>
+        <button type="button" data-drawer-deposit="1">▣ &nbsp; Depósito</button>
+        <button type="button" data-drawer-section="profile">↗ &nbsp; Saque / carteira</button>
+      </div>
+    </div>
+  </aside>
   <header class="app-header">
+    <button type="button" id="mz-drawer-toggle" class="mz-drawer-toggle" aria-label="Abrir menu lateral" aria-controls="mz-home-drawer" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16M4 12h12M4 18h16"/></svg></button>
     <button class="brand-lockup" data-section="home" aria-label="Início">
       <img id="header-site-logo" class="header-site-logo hidden" alt="<?= h($appName) ?>" width="166" height="58">
       <span class="brand-round">M</span>
@@ -97,7 +126,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
     <section class="page-section" id="section-promotions">
       <div id="managed-promotions" class="managed-promotions"></div>
       <div class="inner-head"><span>PROMOÇÕES</span><h1>Benefícios</h1><p>Área pronta para campanhas, VIP, cashback e bônus.</p></div>
-      <p class="empty-state">As campanhas publicadas aparecem nesta página automaticamente.</p>
+      <div id="mz-promo-directory" class="mz-promo-directory" aria-label="Módulos de promoções"></div>
+      <div id="mz-promo-detail" class="mz-promo-detail hidden" aria-live="polite"></div>
     </section>
 
     <section class="page-section" id="section-profile" aria-label="Meu perfil">
@@ -182,6 +212,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$appName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260917-v12-14-playfiver-local-catalog"></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-rules-v13-2"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-rules-v13-2" defer></script>
+<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-menu-tema-v9" defer></script>
 </body>
 </html>

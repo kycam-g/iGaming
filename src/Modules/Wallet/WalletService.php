@@ -128,6 +128,9 @@ final class WalletService
         $transactionType = 'CASINO_'.$eventType;
 
         return Database::transaction(function (PDO $pdo) use ($userId,$betMinor,$winMinor,$provider,$providerTransactionId,$gameCode,$eventType,$idempotencyKey,$scope,$transactionType): array {
+            // Mesmo ordenamento de lock dos resgates: usuário antes da carteira.
+            $userLock=$pdo->prepare('SELECT id FROM users WHERE id=? FOR UPDATE');$userLock->execute([$userId]);
+            if(!$userLock->fetchColumn())throw new DomainException('User not found.');
             $idem = $pdo->prepare('INSERT IGNORE INTO idempotency_keys (`key`,scope) VALUES (:key,:scope)');
             $idem->execute(['key'=>$idempotencyKey,'scope'=>$scope]);
             if ($idem->rowCount() === 0) {
@@ -200,6 +203,11 @@ final class WalletService
             }
             $stmt = $pdo->prepare('UPDATE idempotency_keys SET transaction_id=:transaction_id WHERE `key`=:key AND scope=:scope');
             $stmt->execute(['transaction_id'=>$transactionId,'key'=>$idempotencyKey,'scope'=>$scope]);
+            \App\Modules\Platform\PromotionRedemptionService::applyCasinoWager($pdo,$userId,$transactionId,$betMinor);
+            // O rollover pode converter BONUS em CASH na mesma operação: devolver o saldo final correto ao provedor.
+            $finalBalance=$pdo->prepare('SELECT balance_minor FROM wallet_accounts WHERE id=?');
+            $finalBalance->execute([$account['id']]);
+            $after=(int)$finalBalance->fetchColumn();
 
             return [
                 'transaction_id'=>$transactionId,

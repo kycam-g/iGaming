@@ -1,3 +1,49 @@
+# Atualização V12 — Cupons e Check-in (etapa 1 de premiações)
+
+**Base:** V11. Home, menu lateral, Admin e navegação inferior preservados.
+
+- Resgate autenticado de cupom por código privado, estoque global, uma utilização por usuário/campanha e limite de 10 tentativas/hora.
+- Check-in de sequência diária com virada às 21h de Brasília, reset por ausência, depósitos PAID e apostas PlayFiver confirmadas como requisitos.
+- Créditos transacionais no ledger, histórico do jogador e do Admin, rollover isolado em BONUS e transferência para CASH após apostas válidas **posteriores** ao resgate. Cada aposta só contribui uma vez para o rollover; duplo clique e repetição de callback não repetem premiações.
+- Código de cupom não aparece na API pública, fica acessível apenas ao Admin; campanhas com resgates não podem ser excluídas (desative).
+- Cabeçalho exibe apenas saldo CASH para não confundir bônus bloqueado com saldo de saque. README e `docs/V12_CUPONS_CHECKIN.md` documentam implantação e testes.
+
+**Instalação obrigatória:** backup do banco/arquivos → preserve `.env` → execute `composer install --no-dev --optimize-autoloader` se necessário → `php bin/migrate.php` (migração `019_promotion_redemptions.sql`) → publique os arquivos → atualize com Ctrl+F5. Verifique a data/hora e o fuso da sessão MySQL (os limites de apuração são ajustados para a sessão). Cupons antigos devem receber um código no Admin antes de serem utilizados. **Primeiro em homologação!** Não há MySQL/Composer disponíveis para teste ponta a ponta nesta geração. Não ative bônus financeiros em produção sem testar os cenários em `docs/V12_CUPONS_CHECKIN.md`.
+
+Os outros módulos ainda não creditam valores nesta versão. A integração financeira da PlayFiver depende de verificação real de callbacks e apostas.
+
+---
+
+# Atualização V10 — Logo ao lado do menu na Home
+
+- Alinhamento do cabeçalho da Home: ícone de menu e logo juntos à esquerda; saldo, login e perfil continuam à direita.
+- Alteração somente no CSS público, duplicada em `assets/app.css` e `public/assets/app.css`, com versão de cache atualizada no `public/app.php`.
+- Menu lateral, painel administrativo e navegação inferior permanecem inalterados. Não requer migração de banco.
+- Instalação: preserve o `.env`, substitua os arquivos e atualize a página com Ctrl+F5. Teste visual em diferentes larguras no navegador.
+
+---
+
+# Atualização V8 — Menu lateral da Home
+
+- Ícone de menu no cabeçalho da Home abre drawer à esquerda, com fundo escurecido, fechar ao tocar fora, no botão × ou Escape; acessível por teclado, com foco contido.
+- 12 atalhos levam diretamente aos módulos publicados na V7 em Promoções: Baú, Rebate, Agente, Troca, Nível/Check-in, Resgatar, Semana, VIP, Roleta de Saque, Boas-vindas, Envelope e Sorteio.
+- Atalhos para perfil, convites, depósito e carteira aproveitam os controles já existentes. Menu inferior da Home e painel Admin não foram modificados.
+- Arquivos de frontend estão presentes tanto em `assets/` (instalação raiz) quanto `public/assets/` (DocumentRoot na pasta public). Cache atualizado para V8.
+- Continua sendo versão consultiva: prêmios, saques promocionais e créditos automáticos não foram ativados.
+- Instalação: manter `.env`, backup do banco; substituir arquivos completos. Nenhuma migração nova para o drawer. Testar acesso em celular e desktop no ambiente de homologação.
+
+---
+
+# Atualização V7 — Módulos de Promoções (etapa 1: catálogo + configuração)
+
+**Não é uma implementação financeira completa.** Esta entrega cria 12 páginas de consulta dentro da seção Promoções da Home, preserva o menu inferior original e expõe exclusivamente as regras `enabled=1` por `GET /api/promotions/configs`. Inclui CRUD administrativo para Agência, Rebate, Fundos de Resgate, Compensação Semanal, Roleta de Saque e Sorteio, reutilizando a tabela `promotion_configurations` da migração 018. Mantém os seis tipos existentes. Os novos tipos iniciam sem dados e devem ser cadastrados pelo administrador.
+
+**Não incluído:** saldo real, cupom resgatável, motor de apostas, comissões calculadas, indicação individual, roletas/sorteio com premiação, gestão de bônus, liquidação, cash-out e histórico de recompensas. Os botões de resgate estão desabilitados intencionalmente para não simular transações. O endpoint público não revela registros desabilitados e o login Admin permanece no código da V6.
+
+**Instalação:** backup do banco + arquivos; preservar `.env`; atualizar os arquivos; executar `php bin/migrate.php` se a migração 018 ainda não tiver rodado; depois atualizar com Ctrl+F5. **Não é necessário rodar migração adicional para os seis novos tipos**, pois usam a tabela existente. Validar primeiro em homologação; não liberar bônus reais em produção com esta entrega.
+
+---
+
 # MZ90 — Plataforma iGaming modular em PHP 8.2
 
 Projeto iGaming modular desenvolvido em **PHP 8.2 puro**, com Composer/PSR-4, MySQL/MariaDB e foco em execução local via XAMPP. A plataforma possui área pública, autenticação de jogadores, carteira com ledger imutável, pagamentos PIX, painel administrativo, catálogo de cassino, aparência gerenciável, promoções, afiliados e base para integração com provedores de jogos.
@@ -901,3 +947,126 @@ Este repositório representa o estado atual de desenvolvimento do MZ90. Abertura
 ### PlayFiver atual
 
 Consulte `PLAYFIVER-STATUS.md` e `ATUALIZACAO-V12.14.md`. O estado atual não possui qualquer dependência de Games2API/FiverScan.
+
+
+### Atualização 18/09/2026 — Submenu de promoções
+- Adicionadas oito opções de navegação na área pública de Promoções: Níveis VIP, Cupons, Check-in diário, Roleta de boas-vindas, Envelope vermelho, Baús e indicações, Histórico de bônus e Histórico de níveis.
+- Submenu responsivo com seleção ativa, acessibilidade por botões e painel contextual.
+- **Escopo:** somente interface e navegação. Resgate de cupons, check-in, sorteios, premiações e históricos reais ainda exigem regras de negócio, endpoints e controles administrativos; nenhum prêmio ou saldo é concedido por esta alteração.
+
+### Correção 21/09/2026 — Submenu vinculado à navegação
+- As oito opções agora abrem em um menu suspenso acima do botão **Promoção** da barra inferior, em vez de aparecerem como grade dentro da página.
+- O botão expande/recolhe o menu; selecionar uma opção navega até o conteúdo e fecha o menu. Escape e clique fora também fecham.
+
+### Correção 21/09/2026 — Promoções visíveis nos dois menus
+- Corrigido bug na área pública: `section('promotions')` fechava o submenu imediatamente após a abertura; agora o estado aberto é restaurado após a troca de seção.
+- Adicionado submenu recolhível **também na barra lateral do painel administrativo**, com os oito itens solicitados, seleção e painéis informativos.
+- Funcionalidades de prêmios, resgates e regras de bônus permanecem pendentes de backend; não são simuladas como operacionais.
+- Cache busting do JavaScript administrativo atualizado.
+
+### Correção V3 — navegação da home
+A regra `.mobile-stage > *` aplicava `position: relative` a todos os filhos diretos, anulando o posicionamento fixo da barra inferior e do submenu. Adicionadas regras explícitas para restaurar ambos, com empilhamento correto e atualização de versão dos assets para invalidar cache.
+
+### Correção V4 — submenus somente no painel administrativo (21/09/2026)
+- Removido o submenu com oito itens da interface pública; **Promoção** volta a abrir somente a página pública original de campanhas.
+- Restaurada a navegação original da home, preservando a correção V3 que mantém a barra inferior fixa.
+- O menu lateral do **admin > Promoções** continua com os oito submenus recolhíveis e seus painéis informativos (sem premiações ativas).
+- Eliminada a duplicidade do evento de clique do item pai no admin e atualizadas as versões de cache do CSS/JS públicos e administrativos.
+- O pacote de distribuição não inclui `.env` nem arquivos de log; mantenha seu `.env` atual no servidor.
+
+
+## V5 — Configurações administrativas de promoções (22/09/2026)
+
+- Home e navegação pública permanecem como na V4. **Promoções →** oito submenus somente no Admin.
+- CRUD persistido de Níveis VIP, Cupons, Check-in diário, Roleta de boas-vindas, Envelope vermelho e Baús e indicações. Editar, adicionar e excluir usam autenticação administrativa, validação no servidor e auditoria.
+- Migration `018_promotion_configurations.sql` cria a tabela e cadastra 20 VIPs desabilitados. VIP 1–5 usam valores da referência; VIP 6–20 possuem metas ilustrativas e bônus zero, que exigem revisão antes da operação.
+- Roleta: regra configurável de depósito mínimo, rodadas por depósito e por indicado cadastrado. Baús: meta de indicados, depósito mínimo do indicado, bônus ao indicador, rollover e limite de resgates.
+- Os históricos são informativos enquanto não houver módulo de eventos/transações de bônus. **Nenhum crédito, recompensa, giro ou resgate automático foi conectado ao ledger/carteira nesta versão.** A configuração habilitada não libera pagamentos.
+- Instalação: executar `php bin/migrate.php` depois de fazer backup do banco. Preservar o `.env` existente (não incluído no ZIP). Testar operações em homologação antes de usar em produção.
+
+
+### V6 — Correção de inicialização do login do Admin
+O modal de configurações promocionais possui botões próprios. Ele não deve ser inicializado pelo gerenciador genérico de modais `editor-*`, que exigia `.modal-cancel` e interrompia o JavaScript antes de registrar o formulário de login. Limitado o gerenciador aos modais `editor-*` e adicionado tratamento de Escape no novo modal. Não altera senhas, contas, tokens, configurações de banco nem dados existentes.
+
+
+### V9 — Ajuste de cores do menu lateral (22/09/2026)
+- O menu lateral da Home agora usa a paleta atual do projeto: fundo grafite, cartões cinza-escuro e destaques vermelhos.
+- Cores baseadas nas variáveis do tema (`--bg`, `--surface`, `--surface2`, `--text`, `--muted`, `--line` e `--accent`), sem alteração de layout ou navegação.
+- Atualizada a versão do CSS no `public/app.php` para invalidar cache do navegador.
+- Admin, barra inferior, login e módulos não foram alterados. Preserve seu `.env` ao instalar.
+
+
+### V11 — Ocultar categorias inativas da Home (22/09/2026)
+- Quando nenhuma categoria está habilitada e possui jogos publicados, a seção de categorias da Home desaparece por completo, inclusive o cartão "Todos" e o espaço da faixa.
+- Havendo ao menos uma categoria habilitada e com jogos, a faixa funciona como antes, mantendo "Todos" e as categorias publicadas.
+- Os filtros da página Cassino não são modificados. O menu lateral, o cabeçalho, a barra inferior e o Admin permanecem inalterados.
+- Versões do CSS e JavaScript atualizadas para evitar cache da versão anterior. Não exige migração.
+
+
+### V12 — correção de migração 019 (MySQL 3780)
+
+A migration `019_promotion_redemptions.sql` usa agora `utf8mb4_unicode_ci` nas três novas tabelas, igual às chaves `CHAR(36)` das tabelas de usuários, lançamentos e transações. A criação da coluna e do índice do cupom também é idempotente para permitir repetir `php bin/migrate.php` após uma falha parcial. Faça backup antes da migração; não apague tabelas ou dados.
+
+
+### V12.2 — Correção da migração MySQL (erro 2014)
+
+A migração `019_promotion_redemptions.sql` executa SQL dinâmico via `PREPARE`/`EXECUTE`.
+Quando o campo ou índice já existe, a V12.1 usava `SELECT 1` como operação substituta,
+que pode deixar resultados pendentes e causar `SQLSTATE[HY000] 2014` em conexões sem buffering.
+Na V12.2, as operações substitutas são `DO 0` e o comando `bin/migrate.php`
+consome e fecha os resultados de cada instrução e ativa buffering na conexão CLI.
+A migração 019 continua executável após falha parcial; não é necessário remover tabelas.
+Antes de atualizar em produção: faça backup do banco, preserve o `.env` e execute
+`php bin/migrate.php`. Teste em homologação: não houve teste com banco MySQL conectado neste ambiente.
+
+
+## V12.3 — Redesign do check-in na Home
+
+- Layout vermelho e grafite, hero, sequência, barra de progresso e cards responsivos para cada dia habilitado no Admin.
+- Dia atual, dias concluídos e bloqueados são calculados a partir do status autenticado e do histórico real, sem prêmios fictícios.
+- Resgate existente e atualização da carteira preservados; sem mudanças no banco ou no painel administrativo.
+- Em caso de requisitos de depósito/aposta, estes são exibidos no card disponível; regras e virada às 21h Brasília preservadas.
+- Instalação: substituir arquivos preservando `.env`; nenhuma migração nova necessária.
+- Validar o visual no servidor, tanto com usuário autenticado como deslogado, antes da publicação em produção.
+
+## V12.4 — Check-in limpo e focado nos cards
+
+- A tela do módulo **Nível e Check-in** agora abre em modo limpo: esconde a vitrine de promoções, o cabeçalho genérico “Benefícios” e a lista textual de regras, deixando apenas o botão de voltar e o bloco visual do check-in.
+- Removido o histórico e os textos redundantes do módulo de check-in para priorizar somente os cards, progresso e ação de resgate.
+- O card **Disponível** passou a usar destaque esverdeado; cards concluídos e bloqueados mantêm estados visuais próprios.
+- O último card só vira “card especial” quando houver uma sequência maior (7+ dias), evitando distorções quando existem apenas 2 dias cadastrados.
+- Atualizados os versionamentos de assets no `public/app.php` para forçar limpeza de cache após a substituição dos arquivos.
+- Não exige nova migração. Recomenda-se substituir os arquivos, preservar o `.env` e limpar o cache do navegador com `Ctrl + F5`.
+
+
+## V12.5 — Retorno estilizado e requisitos por dia
+
+- Botão “Voltar às promoções” atualizado para o visual grafite/vermelho do MZ90, com hover e foco acessível.
+- Cada card do check-in mostra depósito mínimo, apostas necessárias e rollover conforme o dia cadastrado no Admin, inclusive dias futuros ou bloqueados. Valores zerados são explicitamente mostrados, sem inventar requisitos.
+- Grade responsiva: três colunas na maioria das telas, duas em celulares estreitos. Estados de resgate e cor verde do card disponível preservados.
+- Não modifica banco, regras de elegibilidade ou transações. Não requer migração. Limpe o cache após substituir os arquivos.
+
+## V13 — VIP: painel do cliente, metas e bônus de upgrade
+
+- Novo painel VIP responsivo em **Home → menu lateral → VIP** com identidade visual vermelha/grafite, 20 níveis existentes sujeitos à ativação individual no Admin, volume de apostas registrado, progresso da próxima faixa e cartões de bônus por nível.
+- O volume é calculado **no servidor**, a partir dos lançamentos de débito confirmados da PlayFiver; o navegador não envia valores de apostas. O volume mensal é exibido apenas como informação, sem penalidade de manutenção implementada.
+- Resgate real e individual do **bônus de upgrade** quando a meta for atingida, com validação de usuário ativo, nível habilitado, prêmio positivo e histórico de resgate. O servidor bloqueia o registro do usuário durante o resgate, impedindo duas concessões simultâneas da mesma campanha. Crédito e rollover reutilizam a transação financeira da V12.
+- No Admin, o rótulo da meta VIP foi alinhado à regra efetivamente utilizada: **apostas acumuladas**. As metas e bônus dos 20 níveis existentes não foram modificados nem ativados automaticamente. Os níveis 6–20 permanecem com bônus zero até configuração manual.
+- **Não implementado nesta versão:** bônus diário/semanal/mensal, manutenção mensal e downgrade. Não há botões fictícios para essas ações; a interface informa essa limitação explicitamente.
+- **Instalação:** backup do banco e dos arquivos; substituição mantendo `.env`; não exige migração adicional. Após instalar, habilite e configure os níveis desejados em Promoções → Níveis VIP, e atualize o navegador com `Ctrl + F5`.
+- **Validação:** executar os cenários com MySQL real em homologação antes de liberar resgates em produção: conta sem apostas, meta atingida, bônus zerado, dupla solicitação, rollover pendente e nível desativado. Os testes de integração com MySQL e o navegador não foram executados no ambiente de geração.
+
+
+## V13.1 — VIP recorrente e manutenção
+
+Consulte `docs/V13_1_VIP.md` para migração obrigatória 020, configuração administrativa, automação cron, regras de nível, resgates e checklist de homologação.
+
+
+## V13.2 — Regras visíveis em cada módulo da Home
+
+- Todas as 12 páginas de Promoções exibem agora a seção recolhível **Como funciona • Regras e requisitos**, integrada ao tema vermelho/grafite.
+- Textos descrevem o funcionamento e o estado real de disponibilidade de cada módulo: apenas cupons, check-in e VIP possuem resgates desta fase. Não é anunciada como funcional uma promoção ainda não implementada.
+- Condições (metas, valores, percentuais, requisitos e rollover) são geradas dinamicamente a partir das configurações **ativas e públicas** do Admin; códigos de cupons não são expostos.
+- Check-in mantém os cards como conteúdo principal e apresenta regras em seção opcional abaixo, sem restabelecer a antiga listagem de requisitos no topo.
+- Nenhuma alteração no banco, nos créditos ou no processamento financeiro. Sem migração nova; preservar `.env` e atualizar os arquivos/cache.
+- Recomenda-se validar a interface em dispositivos móveis e confirmar regras legais e comerciais antes de publicar campanhas em produção.

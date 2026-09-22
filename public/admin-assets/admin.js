@@ -35,13 +35,13 @@ function closeEditor(formId){
   focusTarget?.focus?.();
  },window.matchMedia('(prefers-reduced-motion: reduce)').matches?0:220);
 }
-for(const overlay of document.querySelectorAll('.admin-editor-overlay')){
+for(const overlay of document.querySelectorAll('.admin-editor-overlay[id^="editor-"]')){
  const id=overlay.id.slice('editor-'.length);
  overlay.querySelector('.admin-editor-close').addEventListener('click',()=>closeEditor(id));
  overlay.querySelector('.modal-cancel').addEventListener('click',()=>closeEditor(id));
  overlay.addEventListener('click',e=>{if(e.target===overlay)closeEditor(id)});
 }
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){const overlay=document.querySelector('.admin-editor-overlay:not(.hidden)');if(overlay)closeEditor(overlay.id.slice('editor-'.length))}});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'){const overlay=document.querySelector('.admin-editor-overlay[id^="editor-"]:not(.hidden)');if(overlay)closeEditor(overlay.id.slice('editor-'.length));}});
 function newEditor(formId){const f=document.getElementById(formId);f.reset();f.elements.id.value='';if(formId==='casino-provider-form'){f.elements.code.readOnly=false;f.elements.logo_path.value='';f.elements.logo_file.value='';$('#provider-logo-preview').classList.add('hidden')}if(formId==='casino-category-form'){f.elements.code.readOnly=false;f.elements.sort_order.value='100';f.elements.enabled.checked=true}if(formId==='casino-game-form' && f.elements.access_count)f.elements.access_count.value='250';if(formId==='banners-form'){f.elements.image_path.value='';f.elements.position.value=document.querySelector('[data-banner-filter].active')?.dataset.bannerFilter||'home'}openEditor(formId,false)}
 document.getElementById('new-provider').addEventListener('click',()=>newEditor('casino-provider-form'));
 document.getElementById('new-category').addEventListener('click',()=>newEditor('casino-category-form'));
@@ -73,7 +73,7 @@ function showLogin(){
 $('#admin-login-form').addEventListener('submit',async e=>{e.preventDefault();const f=new FormData(e.currentTarget);try{const d=await api('/admin/api/login',{method:'POST',body:JSON.stringify(Object.fromEntries(f))});token=d.token;localStorage.setItem(tokenKey,token);await boot()}catch(err){alertBox('#login-alert',err.message)}})
 $('#admin-logout').addEventListener('click',async()=>{try{await api('/admin/api/logout',{method:'POST',body:'{}'})}catch{}token='';localStorage.removeItem(tokenKey);location.reload()});
 $('#menu-toggle').addEventListener('click',()=>$('#admin-sidebar').classList.toggle('open'));
-$$('.nav-item[data-page]').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.page)));
+$$('.nav-item[data-page]:not(.promotion-admin-parent)').forEach(b=>b.addEventListener('click',()=>openPage(b.dataset.page)));
 async function openPage(page){$$('.admin-page').forEach(p=>p.classList.add('hidden'));$$('.nav-item').forEach(n=>n.classList.remove('nav-active'));$(`#page-${page}`).classList.remove('hidden');$(`.nav-item[data-page="${page}"]`)?.classList.add('nav-active');$('#admin-sidebar').classList.remove('open');if(page==='dashboard'){setHeading('VISÃO GERAL','Dashboard','Resumo operacional da plataforma.');await loadDashboard()}else if(page==='users'){setHeading('GESTÃO','Usuários','Cadastros, saldos, atividade e situação das contas.');await loadUsers()}else if(page==='finance'){setHeading('GESTÃO','Financeiro','Depósitos, conciliação e eventos dos gateways.');await loadFinance()}else if(page==='casino'){setHeading('PLATAFORMA','Gerenciamento de Jogos API','Visualize e gerencie os jogos cadastrados por provedor e API.');await loadCasino()}else if(page==='gateways'){setHeading('PAGAMENTOS','Gateways','Ative provedores, defina prioridades e separe depósito de saque.');await loadGateways()}else if(['settings','appearance','promotions','affiliates'].includes(page)){setHeading('PLATAFORMA',({settings:'Configurações',appearance:'Aparência',promotions:'Promoções',affiliates:'Afiliados'})[page],'Gerencie conteúdo e configurações.');await loadPlatform()}else if(page==='audit'){setHeading('SISTEMA','Auditoria','Histórico de ações.');await loadAudit()}}
 function setHeading(k,t,d){$('#page-kicker').textContent=k;$('#page-title').textContent=t;$('#page-description').textContent=d}
 $('#reconcile-refresh').addEventListener('click',loadReconciliation);$('#finance-filter').addEventListener('click',()=>{financePage=1;loadFinance()});$('#finance-refresh').addEventListener('click',loadFinance);$('#finance-search').addEventListener('keydown',e=>{if(e.key==='Enter'){financePage=1;loadFinance()}});$('#finance-status').addEventListener('change',()=>{financePage=1;loadFinance()});$('#finance-gateway').addEventListener('change',()=>{financePage=1;loadFinance()});$('#finance-prev').addEventListener('click',()=>{if(financePage>1){financePage--;loadFinance()}});$('#finance-next').addEventListener('click',()=>{if(financePage<financePages){financePage++;loadFinance()}});$('#close-deposit-modal').addEventListener('click',closeDepositModal);$('#deposit-modal').addEventListener('click',e=>{if(e.target.id==='deposit-modal')closeDepositModal()});$('#copy-dep-pix').addEventListener('click',async()=>{const v=$('#dep-pix').value;if(!v)return;try{await navigator.clipboard.writeText(v);$('#copy-dep-pix').textContent='COPIADO';setTimeout(()=>$('#copy-dep-pix').textContent='COPIAR PIX',1200)}catch{}});
@@ -399,4 +399,108 @@ $('#audit-refresh').onclick=()=>{auditPage=1;loadAudit()};$('#audit-prev').oncli
 
 $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.querySelector('[data-banner-filter].active')?.dataset.bannerFilter||'home';const form=$('#banners-form');form.reset();form.elements.id.value='';form.elements.image_path.value='';form.elements.position.value=filter;form.elements.sort_order.value=filter==='casino'?'1':'1';$('#banner-form-title').textContent=filter==='casino'?'Novo banner do lobby':'Novo banner do carrossel';openEditor('banners-form',false)});
  setBannerSection('home');
+})();
+
+// Promoções: submenu independente da navegação genérica e sem serviços fictícios.
+(() => {
+ const group=document.querySelector('.promotion-admin-group');
+ const parent=document.querySelector('.promotion-admin-parent');
+ const detail=document.querySelector('#admin-promotion-detail');
+ const campaigns=document.querySelector('#admin-promotion-campaigns');
+ const titles={vip:'Níveis VIP',coupons:'Cupons',checkin:'Check-in diário',roulette:'Roleta de boas-vindas',envelope:'Envelope vermelho',chests:'Baús e indicações',agency:'Agência',rebate:'Rebate',rescue:'Fundos de Resgate',weekly:'Compensação Semanal',cashwheel:'Roleta de Saque',lottery:'Sorteio','bonus-history':'Histórico de bônus','level-history':'Histórico de níveis'};
+ const select=(key)=>{
+  document.querySelectorAll('[data-admin-promotion-tab]').forEach(b=>b.classList.toggle('active',b.dataset.adminPromotionTab===key));
+  detail.classList.toggle('hidden',!key);campaigns.classList.toggle('hidden',!!key);
+  if(key){document.querySelector('#admin-promotion-detail-title').textContent=titles[key];document.querySelector('#admin-promotion-detail-description').textContent='Cadastre e gerencie as regras desta seção.';window.promotionConfigSelect?.(key);setHeading('PROMOÇÕES',titles[key],'Configuração do módulo de promoções.')}
+ };
+ parent?.addEventListener('click',e=>{e.stopImmediatePropagation();const collapsed=group.classList.toggle('collapsed');parent.setAttribute('aria-expanded',String(!collapsed));if(!collapsed){openPage('promotions');select(null)}});
+ document.querySelectorAll('[data-admin-promotion-tab]').forEach(button=>button.addEventListener('click',e=>{e.stopPropagation();group.classList.remove('collapsed');parent.setAttribute('aria-expanded','true');openPage('promotions');select(button.dataset.adminPromotionTab)}));
+})();
+
+// Gerenciador CRUD persistido por API, isolado do menu e da home pública.
+(() => {
+ const definitions={
+  vip:[['level','Nível VIP','integer'],['goal_cents','Meta de apostas acumuladas (R$)','money'],['bonus_cents','Bônus de upgrade (R$)','money'],['daily_bonus_cents','Bônus diário (R$)','money'],['weekly_bonus_cents','Bônus semanal (R$)','money'],['monthly_bonus_cents','Bônus mensal (R$)','money'],['maintenance_cents','Meta de manutenção mensal (R$)','money'],['rollover_x','Rollover (x)','decimal']],
+  coupons:[['code','Código de resgate (4-64 letras/números)','code'],['quantity','Quantidade disponível','integer'],['bonus_min_cents','Bônus mínimo (R$)','money'],['bonus_max_cents','Bônus máximo (R$)','money'],['rollover_x','Rollover (x)','decimal']],
+  checkin:[['day','Dia do check-in','integer'],['reward_min_cents','Recompensa mínima (R$)','money'],['reward_max_cents','Recompensa máxima (R$)','money'],['random_reward','Recompensa aleatória','bool'],['deposit_min_cents','Recarga necessária (R$)','money'],['bet_min_cents','Aposta necessária (R$)','money'],['extra_cents','Recompensa extra (R$)','money'],['rollover_x','Rollover (x)','decimal']],
+  roulette:[['reward_min_cents','Recompensa mínima (R$)','money'],['reward_max_cents','Recompensa máxima (R$)','money'],['deposit_min_cents','Depósito mínimo para ganhar rodada (R$)','money'],['spins_per_deposit','Rodadas por depósito qualificado','integer'],['spins_per_referral','Rodadas por indicado cadastrado','integer'],['referral_requires_signup','Exigir cadastro pelo link de indicação','bool'],['rollover_x','Rollover do prêmio (x)','decimal']],
+  envelope:[['auto_enabled','Autorizar oferta automática (configuração apenas)','bool'],['reward_min_cents','Valor mínimo (R$)','money'],['reward_max_cents','Valor máximo (R$)','money'],['multiplier_min','Multiplicador mínimo (x)','decimal'],['multiplier_max','Multiplicador máximo (x)','decimal'],['rollover_x','Rollover (x)','decimal']],
+  chests:[['referral_count','Quantidade de indicados elegíveis','integer'],['referred_deposit_min_cents','Depósito mínimo por indicado (R$)','money'],['bonus_cents','Bônus ao indicador (R$)','money'],['rollover_x','Rollover necessário (x)','decimal'],['max_claims','Máximo de resgates por indicador (0 = sem limite)','integer']],
+  agency:[['level','Nível','integer'],['team_bet_min_cents','Apostas válidas da equipe (R$)','money'],['commission_percent','Comissão (%)','decimal']],
+  rebate:[['level','Nível','integer'],['bet_volume_cents','Volume de apostas (R$)','money'],['rebate_percent','Rebate (%)','decimal']],
+  rescue:[['level','Nível','integer'],['loss_min_cents','Perda mínima (R$)','money'],['refund_percent','Compensação (%)','decimal'],['rollover_x','Rollover (x)','decimal']],
+  weekly:[['level','Faixa','integer'],['loss_min_cents','Perda semanal (R$)','money'],['refund_percent','Compensação (%)','decimal'],['rollover_x','Rollover (x)','decimal']],
+  cashwheel:[['target_cents','Meta (R$)','money'],['duration_days','Duração (dias)','integer'],['free_spins_per_day','Rodadas gratuitas/dia','integer'],['referral_bonus_cents','Ajuda por indicado (R$)','money']],
+  lottery:[['spins_per_day','Rodadas por dia','integer'],['collection_bonus_cents','Prêmio por coleção completa (R$)','money'],['rollover_x','Rollover (x)','decimal']]
+ };
+ const $id=id=>document.getElementById(id);
+ let active='',items=[],editing=null;
+ const form=$id('promotion-config-form'),overlay=$id('promotion-config-overlay');
+ const brl=n=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(n)||0)/100);
+ const notify=(message,success=false)=>{const el=$id('promotion-config-alert');el.textContent=message;el.classList.remove('hidden','ok');if(success)el.classList.add('ok');};
+ const val=(value,kind)=>kind==='money'?brl(value):kind==='bool'?(Number(value)?'Sim':'Não'):String(value??'—');
+ const close=()=>{overlay.classList.add('hidden');document.body.classList.remove('admin-editor-open');};
+ const open=item=>{
+  editing=item||null;form.reset();form.elements.id.value=item?.id||'';form.elements.title.value=item?.title||'';form.elements.enabled.checked=!!Number(item?.enabled);
+  $id('promotion-config-modal-title').textContent=(item?'Editar':'Adicionar')+' • '+document.querySelector('#admin-promotion-detail-title').textContent;
+  $id('promotion-config-modal-error').classList.add('hidden');
+  const root=$id('promotion-config-fields');root.replaceChildren();
+  for(const [key,label,kind] of definitions[active]){
+   const field=document.createElement('label');field.textContent=label;
+   const control=document.createElement(kind==='bool'?'select':'input');control.name=key;
+   if(kind==='bool'){for(const [v,t] of [['0','Não'],['1','Sim']]){const option=document.createElement('option');option.value=v;option.textContent=t;control.append(option)}control.value=String(item?.config?.[key]??0)}
+   else if(kind==='code'){control.type='text';control.maxLength=64;control.pattern='[A-Za-z0-9_-]{4,64}';control.required=true;control.autocomplete='off';control.value=String(item?.config?.[key]||'');}
+   else{control.type='number';control.min='0';control.step=kind==='integer'?'1':kind==='money'?'0.01':'0.01';control.required=true;control.value=item?.config?.[key]===undefined?'0':kind==='money'?(Number(item.config[key])/100).toFixed(2):String(item.config[key]);}
+   field.append(control);root.append(field);
+  }
+  overlay.classList.remove('hidden');document.body.classList.add('admin-editor-open');form.elements.title.focus();
+ };
+ async function loadVipSettings(){
+  let panel=document.getElementById('mz-vip-admin-settings');
+  if(!panel){panel=document.createElement('section');panel.id='mz-vip-admin-settings';panel.className='panel mz-vip-admin-settings';document.querySelector('#admin-promotion-detail').prepend(panel);}
+  panel.replaceChildren();const heading=document.createElement('h3');heading.textContent='Programa VIP • Regras de manutenção';panel.append(heading);
+  try{const [response,hist]=await Promise.all([api('/admin/api/promotions/vip/settings'),api('/admin/api/promotions/vip/reviews')]);
+    const cfg=response.settings;const form=document.createElement('form');form.className='platform-form';
+    const enable=document.createElement('label');enable.textContent='Ativar benefícios recorrentes';const check=document.createElement('input');check.type='checkbox';check.checked=!!Number(cfg.enabled);enable.append(check);
+    const modeLabel=document.createElement('label');modeLabel.textContent='Política de manutenção';const mode=document.createElement('select');for(const [value,label] of [['lifelong','VIP vitalício (suspender bônus se faltar manutenção)'],['downgrade','Reduzir nível quando faltar manutenção']]){const option=document.createElement('option');option.value=value;option.textContent=label;mode.append(option);}mode.value=cfg.maintenance_mode;modeLabel.append(mode);
+    const stepsLabel=document.createElement('label');stepsLabel.textContent='Níveis reduzidos por mês (1–20)';const steps=document.createElement('input');steps.type='number';steps.min=1;steps.max=20;steps.value=cfg.downgrade_steps;stepsLabel.append(steps);
+    const save=document.createElement('button');save.className='gold-button';save.type='submit';save.textContent='Salvar regras VIP';const message=document.createElement('p');message.setAttribute('role','status');
+    form.append(enable,modeLabel,stepsLabel,save,message);form.addEventListener('submit',async e=>{e.preventDefault();save.disabled=true;try{await api('/admin/api/promotions/vip/settings',{method:'POST',body:JSON.stringify({enabled:check.checked,maintenance_mode:mode.value,downgrade_steps:Number(steps.value)})});message.textContent='Regras VIP salvas.';}catch(error){message.textContent=error.message;}finally{save.disabled=false;}});panel.append(form);
+    const summary=document.createElement('details');const title=document.createElement('summary');title.textContent='Histórico de manutenção ('+(hist.items||[]).length+' registros recentes)';summary.append(title);
+    for(const item of hist.items||[]){const line=document.createElement('p');line.textContent=`${item.username} • ${item.period_key} • VIP ${item.before_level} → ${item.after_level} • ${item.rule_applied} • ${brl(item.volume_minor)} / ${brl(item.required_minor)}`;summary.append(line);}panel.append(summary);
+  }catch(error){panel.append(document.createTextNode('Falha ao carregar regras VIP: '+error.message));}
+ }
+ const load=async()=>{
+  if(!definitions[active])return;
+  if(active==='vip')loadVipSettings();
+  try{const data=await api('/admin/api/promotion-configs?type='+encodeURIComponent(active));if(!definitions[active])return;items=data.items||[];render();}
+  catch(e){notify('Não foi possível carregar configurações: '+e.message+'. Execute a migration 018 no servidor.');}
+ };
+ const render=()=>{
+  const head=$id('promotion-config-head'),body=$id('promotion-config-body');head.replaceChildren();body.replaceChildren();
+  const tr=document.createElement('tr');for(const label of ['Nome',...definitions[active].map(x=>x[1]),'Status','Ações']){const th=document.createElement('th');th.textContent=label;tr.append(th)}head.append(tr);
+  if(!items.length){const row=document.createElement('tr'),cell=document.createElement('td');cell.colSpan=definitions[active].length+3;cell.textContent='Nenhuma configuração cadastrada.';cell.className='promotion-empty';row.append(cell);body.append(row);return;}
+  for(const item of items){const row=document.createElement('tr');for(const text of [item.title,...definitions[active].map(([k,,type])=>val(item.config?.[k],type)),Number(item.enabled)?'Habilitada':'Desabilitada']){const cell=document.createElement('td');cell.textContent=text;row.append(cell)}
+   const actions=document.createElement('td');actions.className='promotion-row-actions';
+   const edit=document.createElement('button');edit.type='button';edit.textContent='Editar';edit.className='row-action';edit.addEventListener('click',()=>open(item));
+   const del=document.createElement('button');del.type='button';del.textContent='Excluir';del.className='danger-button';del.addEventListener('click',async()=>{if(!confirm('Excluir “'+item.title+'”? Esta alteração não pode ser desfeita.'))return;del.disabled=true;try{await api('/admin/api/promotion-configs/delete',{method:'POST',body:JSON.stringify({type:active,id:item.id})});await load();notify('Registro excluído.',true)}catch(e){notify(e.message);del.disabled=false}});
+   actions.append(edit,del);row.append(actions);body.append(row);
+  }
+ };
+ async function loadRedemptionHistory(){
+  const head=$id('promotion-config-head'),body=$id('promotion-config-body');head.replaceChildren();body.replaceChildren();
+  const tr=document.createElement('tr');for(const label of ['Jogador','Promoção','Campanha','Dia','Valor','Rollover','Status','Data']){const th=document.createElement('th');th.textContent=label;tr.append(th)}head.append(tr);
+  try{const data=await api('/admin/api/promotions/redemptions');for(const item of data.items||[]){const row=document.createElement('tr');for(const value of [item.username,item.promotion_type,item.title,item.day_key||'—',brl(item.amount_minor),brl(item.wager_progress_minor)+' / '+brl(item.wager_required_minor),item.status,item.created_at]){const td=document.createElement('td');td.textContent=String(value??'');row.append(td)}body.append(row)}if(!data.items?.length){const row=document.createElement('tr'),td=document.createElement('td');td.colSpan=8;td.textContent='Nenhum resgate registrado.';row.append(td);body.append(row)}}catch(error){notify('Falha ao consultar resgates: '+error.message)}
+ }
+ window.promotionConfigSelect=key=>{active=key;const vipPanel=document.getElementById('mz-vip-admin-settings');if(vipPanel)vipPanel.classList.toggle('hidden',key!=='vip');const supported=!!definitions[key];$id('promotion-config-new').classList.toggle('hidden',!supported);$id('promotion-config-head').replaceChildren();$id('promotion-config-body').replaceChildren();$id('promotion-config-alert').classList.add('hidden');
+  if(!supported){if(key==='bonus-history')loadRedemptionHistory();else if(key==='level-history'){(async()=>{try{const response=await api('/admin/api/promotions/vip/reviews');const body=$id('promotion-config-body');for(const item of response.items||[]){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent=`${item.username} · ${item.period_key} · VIP ${item.before_level} → ${item.after_level} · ${item.rule_applied} · ${brl(item.volume_minor)} / ${brl(item.required_minor)}`;tr.append(td);body.append(tr)}if(!response.items?.length){const tr=document.createElement('tr'),td=document.createElement('td');td.textContent='Nenhuma revisão mensal registrada.';tr.append(td);body.append(tr)}}catch(err){notify(err.message)}})();}return;}load();};
+ $id('promotion-config-new').addEventListener('click',()=>{if(definitions[active])open(null)});
+ $id('promotion-config-close').addEventListener('click',close);$id('promotion-config-cancel').addEventListener('click',close);
+ overlay.addEventListener('click',e=>{if(e.target===overlay)close()});
+ document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!overlay.classList.contains('hidden'))close()});
+ form.addEventListener('submit',async e=>{e.preventDefault();const button=form.querySelector('[type=submit]');button.disabled=true;
+  try{const config={};for(const [key,,kind] of definitions[active]){const raw=form.elements[key].value;config[key]=kind==='code'?String(raw).trim().toUpperCase():kind==='bool'?Number(raw):kind==='money'?Math.round(Number(raw)*100):Number(raw)}
+   await api('/admin/api/promotion-configs/save',{method:'POST',body:JSON.stringify({type:active,id:form.elements.id.value||0,title:form.elements.title.value,enabled:form.elements.enabled.checked,config})});close();await load();notify('Configuração salva com sucesso.',true);
+  }catch(err){const el=$id('promotion-config-modal-error');el.textContent=err.message;el.classList.remove('hidden')}finally{button.disabled=false}
+ });
 })();
