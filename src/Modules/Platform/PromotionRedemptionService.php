@@ -39,7 +39,27 @@ final class PromotionRedemptionService
         foreach($stmt->fetchAll() as $row){$cfg=json_decode((string)$row['config'],true)?:[];$n=(int)($cfg['day']??0);if($n>0)$days[$n]=['id'=>(int)$row['id'],'title'=>$row['title'],'config'=>$cfg];}
         ksort($days);
         if($next!==null && $days && $next>max(array_keys($days)))$next=1;
-        return ['today'=>$day,'claimed_today'=>(bool)$current,'next_day'=>$next,'days'=>array_values($days),'history'=>$history,'timezone'=>'America/Sao_Paulo','cutoff_hour'=>'21:00'];
+        $requiredDeposit=0;$requiredBet=0;$depositProgress=0;$betProgress=0;$availableToday=false;$availabilityMessage='Sem check-in disponível no momento.';
+        if($next!==null && isset($days[$next])){
+            $cfg=$days[$next]['config']??[];
+            $requiredDeposit=(int)($cfg['deposit_min_cents']??0);
+            $requiredBet=(int)($cfg['bet_min_cents']??0);
+            if($requiredDeposit>0){
+                $stmt=$db->prepare("SELECT COALESCE(SUM(amount_minor),0) FROM payment_transactions WHERE user_id=? AND kind='DEPOSIT' AND status='PAID' AND updated_at>=? AND updated_at<?");
+                $stmt->execute([$userId,$from,$until]);
+                $depositProgress=(int)$stmt->fetchColumn();
+            }
+            if($requiredBet>0){
+                $stmt=$db->prepare("SELECT COALESCE(SUM(le.amount_minor),0) FROM ledger_entries le JOIN financial_transactions ft ON ft.id=le.transaction_id WHERE ft.user_id=? AND ft.type IN ('CASINO_BET','CASINO_WINBET') AND ft.status='COMPLETED' AND le.direction='DEBIT' AND le.reference_type='PLAYFIVER' AND ft.created_at>=? AND ft.created_at<?");
+                $stmt->execute([$userId,$from,$until]);
+                $betProgress=(int)$stmt->fetchColumn();
+            }
+            $availableToday=!$current && $depositProgress>=$requiredDeposit && $betProgress>=$requiredBet;
+            if($current)$availabilityMessage='Check-in de hoje já resgatado.';
+            elseif($availableToday)$availabilityMessage='Recompensa diária disponível para resgate.';
+            else $availabilityMessage='Requisitos pendentes para o check-in de hoje.';
+        }
+        return ['today'=>$day,'claimed_today'=>(bool)$current,'next_day'=>$next,'days'=>array_values($days),'history'=>$history,'timezone'=>'America/Sao_Paulo','cutoff_hour'=>'21:00','available_today'=>$availableToday,'required_deposit_minor'=>$requiredDeposit,'required_bet_minor'=>$requiredBet,'deposit_progress_minor'=>$depositProgress,'bet_progress_minor'=>$betProgress,'availability_message'=>$availabilityMessage];
     }
     /** VIP: volume real do ledger de apostas PlayFiver, nunca valores fornecidos pelo cliente. */
     private static function vipVolume(PDO $db,string $userId): array {
@@ -106,6 +126,13 @@ final class PromotionRedemptionService
         if(($campaign['type']??'')!=='cashwheel')throw new DomainException('Campanha de Roleta de Saque inválida.');
         $config['forced_reward_cents']=$amountMinor;
         return $this->award($db,$userId,$campaign,$config,'cashwheel',null,null);
+    }
+
+    /** Crédito do prêmio do Sorteio após completar a coleção HAPPY. */
+    public function creditLottery(PDO $db,string $userId,array $campaign,array $config,int $amountMinor):array {
+        if(($campaign['type']??'')!=='lottery')throw new DomainException('Campanha de Sorteio inválida.');
+        $config['forced_reward_cents']=$amountMinor;
+        return $this->award($db,$userId,$campaign,$config,'lottery',null,null);
     }
 
     /** Crédito do Envelope Vermelho após o entitlement diário ser reservado. */

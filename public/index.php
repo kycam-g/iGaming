@@ -37,6 +37,7 @@ use App\Modules\Platform\RescueService;
 use App\Modules\Platform\WelcomeRouletteService;
 use App\Modules\Platform\RedEnvelopeService;
 use App\Modules\Platform\CashWheelService;
+use App\Modules\Platform\LotteryService;
 
 Env::load(dirname(__DIR__) . '/.env');
 $router = new Router();
@@ -65,6 +66,7 @@ $rescue = new RescueService();
 $welcomeRoulette = new WelcomeRouletteService();
 $redEnvelope = new RedEnvelopeService();
 $cashWheel = new CashWheelService();
+$lottery = new LotteryService();
 
 $router->get('/health', fn() => ['status' => 'ok', 'service' => 'igaming-php']);
 
@@ -104,6 +106,10 @@ $router->get('/api/promotions/cashwheel/status',function(Request $request)use($a
 $router->post('/api/promotions/cashwheel/spin',function(Request $request)use($auth,$cashWheel){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $cashWheel->spin((string)$user['id']);});
 $router->post('/api/promotions/cashwheel/claim',function(Request $request)use($auth,$cashWheel){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $cashWheel->claim((string)$user['id']);});
 $router->get('/admin/api/promotions/cashwheel/report',function(Request $request)use($adminAuth,$cashWheel){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $cashWheel->report();});
+$router->get('/api/promotions/lottery/status',function(Request $request)use($auth,$lottery){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $lottery->status((string)$user['id']);});
+$router->post('/api/promotions/lottery/spin',function(Request $request)use($auth,$lottery){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $lottery->spin((string)$user['id']);});
+$router->post('/api/promotions/lottery/claim',function(Request $request)use($auth,$lottery){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $lottery->claim((string)$user['id']);});
+$router->get('/admin/api/promotions/lottery/report',function(Request $request)use($adminAuth,$lottery){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $lottery->report();});
 $router->get('/api/promotions/envelope/status',function(Request $request)use($auth,$redEnvelope){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $redEnvelope->status((string)$user['id']);});
 $router->post('/api/promotions/envelope/claim',function(Request $request)use($auth,$redEnvelope){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $redEnvelope->claim((string)$user['id']);});
 $router->get('/admin/api/promotions/envelope/report',function(Request $request)use($adminAuth,$redEnvelope){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $redEnvelope->report();});

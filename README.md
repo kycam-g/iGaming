@@ -1257,3 +1257,141 @@ Depois configure em **Admin → Promoções → Roleta de Saque** e ative a camp
 - Mantido o alinhamento dos demais valores da roleta.
 - Atualizado o cache-buster dos assets em `public/app.php`.
 - Sem migration.
+
+## V21.8 — Roleta de Saque: labels todos mais para fora
+- Ajustado o posicionamento de **todos os labels** da Roleta de Saque para ficarem mais externos e melhor alinhados nas fatias.
+- Inclui os labels monetários, **"Não ganhou nada"** e **"Bônus em moeda"**.
+- Refinados também os raios de posicionamento nas quebras responsivas (desktop e mobile).
+- Atualizado o cache-buster dos assets em `public/app.php`.
+- Sem migration.
+
+
+## V22 — Sorteio de Cartas + topo do Admin
+- Implementado o módulo **Sorteio de Cartas** com coleção `HAPPY`.
+- Cada jogador recebe a quantidade de giros diários configurada no Admin.
+- Cada giro entrega uma carta entre H, A, P, P e Y; cartas repetidas permanecem no histórico.
+- O prêmio só pode ser resgatado após completar `H + A + P + P + Y`.
+- Após o resgate, uma nova coleção é iniciada e o histórico é preservado.
+- O prêmio da coleção e o rollover são configuráveis no Admin.
+- Adicionado relatório administrativo com progresso da coleção e quantidade de coleções concluídas.
+- Adicionada migration `033_lottery_cards.sql`.
+- Ajustado o branding no topo/menu lateral do Admin: removida a logo, exibido somente o nome configurado da plataforma, com a primeira letra em vermelho.
+
+
+## V22.1 — Sorteio HAPPY com dificuldade + topo do Admin
+- Corrigido o nome da plataforma no topo do Admin para permanecer em uma única linha.
+- A primeira letra continua vermelha e o subtítulo **ADMIN** voltou abaixo do nome.
+- O Sorteio agora possui 6 resultados visuais: **H, A, P, P, Y e Não ganhou nada**.
+- Adicionada configuração de dificuldade/chance de carta útil no Admin: Muito fácil (80%), Fácil (65%), Normal (50%), Difícil (35%) e Muito difícil (20%).
+- Quando o giro acerta, o servidor entrega uma carta que ainda falta para HAPPY; quando falha, retorna Não ganhou nada.
+- A chance é aplicada no servidor, não apenas no visual.
+- Não exige nova migration: o resultado sem prêmio usa `N` no histórico existente e a dificuldade fica no JSON da campanha.
+
+
+## V22.2 — Sorteio sem mensagens extras e sem piscar
+- Removido da página pública o selo de dificuldade/chance de carta útil.
+- Removida da tabela principal do Admin a coluna de chance de carta útil; a dificuldade continua configurável ao editar a campanha.
+- O Sorteio não recarrega mais todo o card ao final do giro.
+- A roleta mantém a posição final e atualiza rodadas, coleção e botões diretamente no DOM, evitando o piscar da janela.
+- A animação do Sorteio passou a usar transição contínua, preservando o estado visual ao terminar.
+- Sem nova migration.
+
+
+## V22.3 — Chances ocultas na área pública
+- Removidas da Home e páginas públicas todas as informações de probabilidade/chance de ganho dos módulos.
+- **Giro da Sorte** não exibe mais percentual de vitória; mantém apenas informações de prêmio e requisitos de rodada.
+- **Sorteio HAPPY** não exibe mais chance de carta útil nas regras ou condições publicadas.
+- As probabilidades continuam configuráveis e aplicadas internamente pelo Admin/servidor; apenas deixaram de ser exibidas aos jogadores.
+- As taxas que não são probabilidades (ex.: rebate, comissão, fundo de resgate) continuam visíveis normalmente.
+- Sem nova migration.
+
+## V22.4 — Sorteio HAPPY com letras acumulativas e última letra rara
+- As letras H, A, P e Y agora podem se repetir indefinidamente e ficam acumuladas na coleção do jogador (ex.: H x10, A x4, P x7).
+- A coleção é concluída quando o jogador possui pelo menos H x1, A x1, P x2 e Y x1.
+- Quando falta apenas a última unidade necessária para completar HAPPY, essa letra passa a ter probabilidade interna extremamente baixa por giro; os demais resultados continuam podendo gerar letras repetidas ou “Não ganhou nada”.
+- A interface pública agora exibe os contadores acumulados das letras em vez de apenas “Coletada/Faltando”.
+- O relatório do Admin mostra os totais acumulados por letra.
+- Campos internos de chance continuam ocultos da área pública e dos payloads públicos usados pela Home.
+- Sem nova migration.
+
+
+## V22.7 - Promoções ligadas aos módulos
+- Página de promoções com banners premium clicáveis para cada módulo implementado.
+- Badges de disponibilidade automática conforme configurações ativas publicadas em `promotion_configurations`.
+- Grade de módulos com status `Disponível` / `Em breve`.
+- Módulo Troca de Recompensas sem o bloco `Condições publicadas nesta campanha`.
+
+
+## V22.8 — Ordem dos banners de promoções
+- Ordem editorial: Giro da Sorte, Clube VIP, Roleta de Saque, Nível e Check-in, Baú do Tesouro, Troca de Recompensas, Rebate, Agência, Fundos de Resgate, Sorteio HAPPY.
+- Campanhas publicadas aparecem antes das que não possuem configuração ativa, respeitando a ordem editorial dentro de cada grupo.
+- O badge público diz «Campanha ativa» e não promete resgate/rodadas elegíveis por jogador; disponibilidade individual deve ser validada pelas APIs do módulo.
+- Envelope Vermelho permanece exclusivo do popup automático, sem banner que levaria a uma página inexistente.
+- Somente front-end; sem migration.
+
+## V22.9 — Promoções com cards compactos e disponibilidade por jogador
+
+### Ajustes realizados
+- removidos os banners/quadrões grandes do topo da página de Promoções;
+- mantidos apenas os cards compactos no estilo da grade menor;
+- removido o texto `Campanha ativa` dos cards;
+- cards agora exibem status por jogador:
+  - `Disponível` em verde quando existe benefício/rodada/resgate liberado;
+  - `Indisponível` em vermelho quando o jogador não possui benefício liberado;
+- subtítulo do card passou a exibir o motivo/status real do módulo (ex.: `2 giro(s) disponível(is)`, `Sem rodadas disponíveis`, `Check-in de hoje disponível`, etc.);
+- ocultado o bloco `managed-promotions` da interface;
+- Promoções agora consultam status real dos módulos por API para refletir disponibilidade individual do jogador.
+
+### Regras dinâmicas implementadas nos cards
+- **Giro da Sorte:** disponível quando houver giros disponíveis;
+- **Clube VIP:** disponível quando houver upgrade VIP ou benefício recorrente liberado;
+- **Roleta de Saque:** disponível quando houver rodadas grátis ou resgate liberado por meta atingida;
+- **Nível e Check-in:** disponível quando o check-in do dia estiver realmente elegível;
+- **Baú do Tesouro:** disponível quando houver baú resgatável;
+- **Troca de Recompensas:** indica uso de código promocional;
+- **Rebate:** disponível quando houver saldo mínimo resgatável;
+- **Agência e Indicações:** disponível quando houver saldo de afiliado;
+- **Fundos de Resgate:** disponível quando houver fundo liberado no dia;
+- **Sorteio de Cartas:** disponível quando houver rodadas ou prêmio da coleção liberado.
+
+### Backend
+- endpoint `/api/promotions/status` enriquecido com status de elegibilidade do Check-in (`available_today`, progresso e requisitos do dia), sem necessidade de migration.
+
+
+## V22.10 — Correção da disponibilidade dos cards pós-login
+- O status dos cards é atualizado após o login/restauração de sessão (evento `mz:auth-ready`). Antes, a primeira consulta era feita antes da autenticação e ficava congelada.
+- Atualização ao entrar na página de Promoções, voltar ao índice, concluir giros/resgates e sair da conta.
+- Consultas concorrentes agora usam um número de versão: respostas antigas não podem sobrescrever um estado mais recente.
+- Em falha de consulta, não afirmar que o jogador tem zero giros; mostrar estado ainda não confirmado.
+- Correção também para Sorteio HAPPY (rodadas diárias), Giro da Sorte, Roleta de Saque e demais cards.
+- Arquivos JS e cache-busting sincronizados em `assets/` e `public/assets/`. Sem migration nova.
+- Homologar com uma conta que possui rodadas, uma sem rodadas e uma recém-autenticada.
+- Teste automatizado com DOM/API simulados: conta não autenticada → login → Sorteio HAPPY com 50 rodadas: card muda para `Disponível` (verde) e apresenta `50 rodada(s) disponível(is)`. Testes reais com banco e conta de produção ainda devem ser feitos em homologação.
+
+## V23.1 — Etapa 1/4: Central de Recompensas
+
+### Escopo implementado nesta entrega
+- A página de Promoções ganhou uma **Central de Recompensas** acima dos cards compactos já existentes.
+- Área personalizada após login: contagem de módulos com benefício disponível, lista de giros/resgates liberados com acesso direto aos módulos, outros módulos em área recolhível e últimos resgates.
+- Históricos monetários são lidos do endpoint existente `/api/promotions/status` (tabela de resgates), sem contabilizar progresso interno de roleta como saldo de carteira.
+- Indicadores reutilizam a consulta autenticada de status dos módulos da V22.10, inclusive giros disponíveis do Sorteio HAPPY.
+- Atualização ocorre ao abrir Promoções, autenticar, sair da conta, atualizar carteira e após eventos de promoção. As respostas antigas de consultas concorrentes não podem sobrescrever o estado mais recente.
+- Na visualização de detalhes, a Central desaparece para não competir com o módulo aberto.
+- Responsividade mobile e desktop com componentes no tema escuro/vermelho/verde.
+- Nenhuma migração nova ou mudança nas regras de concessão, carteira ou rollover.
+
+### Limites desta etapa
+- A Central mostra a situação consultada e **não executa resgates**, que continuam nos serviços atuais do servidor.
+- O histórico consolidado representa os últimos resgates retornados por `/api/promotions/status` (máximo 8 nesta interface); não é um extrato integral de depósitos, saques ou apostas.
+- Disponibilidade de código promocional exige informar um cupom válido; por privacidade, a Central não testa códigos hipotéticos.
+- Os status existentes de cada módulo são reutilizados: homologação financeira, validação de concorrência e auditoria de ledger serão objeto da etapa 4.
+
+### Testes e implantação
+- `node tests/rewards-center-smoke.js` valida cenário de 50 rodadas HAPPY, acesso pela Central e histórico com resgate real.
+- `node --check public/assets/promotions.js` e `php -l public/app.php` verificam sintaxe.
+- Entrega apenas de interface e leitura de APIs existentes: **não exige migration**.
+
+### Próximas etapas da V23
+2. Padronização visual premium de todos os módulos e testes em diferentes tamanhos de tela.
+3. Gestão administrativa: relatórios de campanhas, alterações e regras com validações.
+4. Auditoria financeira: idempotência, concorrência, rollover, integrações e reconciliação antes de operação com dinheiro real.

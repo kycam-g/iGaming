@@ -18,7 +18,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-roleta-saque-labels-v21-7">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-rewards-center-v23-1">
 </head>
 <body>
 <div class="mobile-stage">
@@ -123,8 +123,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
     </section>
 
     <section class="page-section" id="section-promotions">
-      <div id="managed-promotions" class="managed-promotions"></div>
       <div class="inner-head"><span>PROMOÇÕES</span><h1>Benefícios</h1><p>Área pronta para campanhas, VIP, cashback e bônus.</p></div>
+      <div id="mz-rewards-center" class="mz-rewards-center" aria-label="Central de recompensas"></div>
       <div id="mz-promo-directory" class="mz-promo-directory" aria-label="Módulos de promoções"></div>
       <div id="mz-promo-detail" class="mz-promo-detail hidden" aria-live="polite"></div>
     </section>
@@ -211,8 +211,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-roleta-saque-labels-v21-7"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-roleta-saque-labels-v21-7" defer></script>
-<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-roleta-saque-labels-v21-7" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-rewards-center-v23-1"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-rewards-center-v23-1" defer></script>
+<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-rewards-center-v23-1" defer></script>
 </body>
 </html>

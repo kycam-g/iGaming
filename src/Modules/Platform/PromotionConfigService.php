@@ -21,7 +21,7 @@ final class PromotionConfigService
         'rebate'=>['level'=>'int','bet_volume_cents'=>'money','rebate_percent'=>'decimal'],
         'rescue'=>['level'=>'int','loss_min_cents'=>'money','refund_percent'=>'decimal','rollover_x'=>'decimal'],
         'cashwheel'=>['target_cents'=>'money','duration_days'=>'int','free_spins_per_day'=>'int','spin_min_cents'=>'money','spin_max_cents'=>'money','first_spin_min_percent'=>'decimal','first_spin_max_percent'=>'decimal','later_spin_max_percent'=>'decimal','no_win_chance_percent'=>'decimal','cash_bonus_chance_percent'=>'decimal','cash_bonus_min_cents'=>'money','cash_bonus_max_cents'=>'money','cash_bonus_rollover_x'=>'decimal','referral_bonus_cents'=>'money','rollover_x'=>'decimal'],
-        'lottery'=>['spins_per_day'=>'int','collection_bonus_cents'=>'money','rollover_x'=>'decimal'],
+        'lottery'=>['spins_per_day'=>'int','hit_chance_percent'=>'decimal','collection_bonus_cents'=>'money','rollover_x'=>'decimal'],
     ];
     private function db(): PDO { return Database::connection(); }
     private function fields(string $type): array {
@@ -39,6 +39,9 @@ final class PromotionConfigService
         return array_map(static function(array $row):array {
             $row['config']=json_decode($row['config'],true) ?: [];
             if($row['type']==='coupons')unset($row['config']['code']);
+            if($row['type']==='lottery')unset($row['config']['hit_chance_percent']);
+            if($row['type']==='roulette')unset($row['config']['win_chance_percent']);
+            if($row['type']==='cashwheel')unset($row['config']['no_win_chance_percent'],$row['config']['cash_bonus_chance_percent']);
             return $row;
         },$stmt->fetchAll(PDO::FETCH_ASSOC));
     }
@@ -57,6 +60,7 @@ final class PromotionConfigService
                 elseif($type==='cashwheel' && $name==='first_spin_max_percent')$raw[$name]=90;
                 elseif($type==='cashwheel' && $name==='later_spin_max_percent')$raw[$name]=8;
                 elseif($type==='cashwheel' && $name==='no_win_chance_percent')$raw[$name]=20;
+                elseif($type==='lottery' && $name==='hit_chance_percent')$raw[$name]=50;
                 else throw new DomainException('Campo obrigatório: '.$name);
             }
             $value=$raw[$name];
@@ -107,6 +111,12 @@ final class PromotionConfigService
                 if($dup->fetchColumn())throw new DomainException('O Envelope Vermelho aceita apenas uma configuração. Edite a configuração existente.');
             }
         }
+        if($type==='lottery'){
+            if($config['spins_per_day']<1 || $config['spins_per_day']>50)throw new DomainException('Configure entre 1 e 50 rodadas por dia no Sorteio.');
+            if($config['collection_bonus_cents']<1 || $config['collection_bonus_cents']>100000000)throw new DomainException('Configure um prêmio válido para completar a coleção.');
+            if($config['rollover_x']<0 || $config['rollover_x']>100)throw new DomainException('Rollover do Sorteio deve ficar entre 0x e 100x.');
+            if(!$id){$dup=$this->db()->prepare("SELECT id FROM promotion_configurations WHERE type='lottery' LIMIT 1");$dup->execute();if($dup->fetchColumn())throw new DomainException('O Sorteio aceita apenas uma configuração. Edite a existente.');}
+        }
         if($type==='cashwheel'){
             if($config['target_cents']<100)throw new DomainException('A meta da Roleta de Saque deve ser de pelo menos R$ 1,00.');
             if($config['duration_days']<1 || $config['duration_days']>30)throw new DomainException('A validade deve ficar entre 1 e 30 dias.');
@@ -121,6 +131,13 @@ final class PromotionConfigService
             if($config['cash_bonus_rollover_x']>100 || $config['rollover_x']>100)throw new DomainException('Rollover não pode ultrapassar 100x.');
             if($config['referral_bonus_cents']>$config['target_cents'])throw new DomainException('A ajuda por indicação não pode ser maior que a meta.');
             if(!$id){$dup=$this->db()->prepare("SELECT id FROM promotion_configurations WHERE type='cashwheel' LIMIT 1");$dup->execute();if($dup->fetchColumn())throw new DomainException('A Roleta de Saque aceita apenas uma configuração. Edite a existente.');}
+        }
+        if($type==='lottery'){
+            if($config['spins_per_day']<1 || $config['spins_per_day']>100)throw new DomainException('Configure entre 1 e 100 rodadas do Sorteio por dia.');
+            if($config['hit_chance_percent']<1 || $config['hit_chance_percent']>95)throw new DomainException('A chance de carta útil deve ficar entre 1% e 95%.');
+            if($config['collection_bonus_cents']<1)throw new DomainException('Configure um prêmio positivo para completar HAPPY.');
+            if($config['rollover_x']>100)throw new DomainException('Rollover não pode ultrapassar 100x.');
+            if(!$id){$dup=$this->db()->prepare("SELECT id FROM promotion_configurations WHERE type='lottery' LIMIT 1");$dup->execute();if($dup->fetchColumn())throw new DomainException('O Sorteio aceita apenas uma configuração. Edite a existente.');}
         }
         if($type==='roulette'){
             if($config['spins_per_deposit']===0 && $config['spins_per_referral']===0)throw new DomainException('Defina pelo menos uma forma de ganhar rodadas.');

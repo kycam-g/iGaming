@@ -359,3 +359,12 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
 
 .admin-site-logo{display:block;max-width:180px;width:auto;height:42px;object-fit:contain;flex:0 0 auto}
 .admin-brand span strong{display:block;font:inherit;color:inherit}
+
+/* V22.1 • Branding textual do admin */
+.admin-brand.admin-brand-textonly{display:flex!important;flex-direction:column;align-items:flex-start;justify-content:center;gap:5px;padding:8px 10px 16px;min-height:68px;overflow:hidden}
+.admin-brand-word{display:flex!important;flex-direction:row!important;align-items:baseline;max-width:100%;font-size:24px!important;line-height:1!important;font-weight:950;letter-spacing:-.8px;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-brand-first,.admin-brand-rest{display:inline!important;flex:none!important;font:inherit!important;line-height:inherit!important}
+.admin-brand-first{color:#ef4438!important}
+.admin-brand-rest{color:#fff!important}
+.admin-brand-subtitle{display:block!important;margin:0!important;padding:0!important;font-size:9px!important;line-height:1!important;letter-spacing:2.4px!important;color:#b8b0a6!important;font-weight:850!important}
+.admin-brand.admin-brand-textonly img,.admin-brand.admin-brand-textonly>b{display:none!important}

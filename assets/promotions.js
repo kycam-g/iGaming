@@ -3,6 +3,7 @@
   'use strict';
   const base=(window.IGAMING?.basePath||'').replace(/\/$/,'');
   const directory=document.getElementById('mz-promo-directory');
+  const rewardsCenter=document.getElementById('mz-rewards-center');
   const detail=document.getElementById('mz-promo-detail');
   const section=detail?.closest('.page-section');
   if(!directory||!detail)return;
@@ -16,9 +17,17 @@
    {id:'vip',title:'Clube VIP',icon:'👑',desc:'Níveis e benefícios configurados.',type:'vip',fields:[['level','VIP','integer'],['goal_cents','Meta','money'],['bonus_cents','Bônus','money'],['rollover_x','Rollover','multiple']]},
    {id:'cashwheel',title:'Roleta de Saque',icon:'🎡',desc:'Condições da campanha configurada.',type:'cashwheel',fields:[['target_cents','Meta da campanha','money'],['duration_days','Validade (dias)','integer'],['free_spins_per_day','Rodadas grátis/dia','integer']]},
    {id:'lottery',title:'Sorteio de Cartas',icon:'🃏',desc:'Prêmio de coleção e regras publicadas.',type:'lottery',fields:[['spins_per_day','Rodadas por dia','integer'],['collection_bonus_cents','Prêmio coleção','money'],['rollover_x','Rollover','multiple']]},
-   {id:'roulette',title:'Giro da Sorte',icon:'🎯',desc:'Rodadas por depósito e indicação.',type:'roulette',fields:[['deposit_min_cents','Depósito mínimo','money'],['spins_per_deposit','Rodadas por depósito','integer'],['spins_per_referral','Rodadas por indicado','integer'],['win_chance_percent','Chance de ganho','percent']]},
+   {id:'roulette',title:'Giro da Sorte',icon:'🎯',desc:'Rodadas por depósito e indicação.',type:'roulette',fields:[['deposit_min_cents','Depósito mínimo','money'],['spins_per_deposit','Rodadas por depósito','integer'],['spins_per_referral','Rodadas por indicado','integer']]},
   ];
+  // Ordem editorial fixa. A disponibilidade apenas agrupa campanhas publicadas antes das desativadas.
+  const promotionOrder=['roulette','vip','cashwheel','checkin','chests','coupons','rebate','agency','rescue','lottery'];
+  const promoRank=id=>{const i=promotionOrder.indexOf(id);return i<0?promotionOrder.length:i;};
   let configs=[];
+  let availabilityByModule={};
+  let rewardSnapshots={};
+  let availabilityRefreshVersion=0;
+  const orderedModules=()=>[...definitions].sort((a,b)=>Number(isModuleAvailable(b))-Number(isModuleAvailable(a))||promoRank(a.id)-promoRank(b.id));
+  const hiddenCampaignSummaryModules=new Set(['coupons']);
   const brl=value=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(value||0)/100);
   function token(){return localStorage.getItem('igaming_token')||'';}
   async function userApi(path,body=null){
@@ -31,12 +40,56 @@
   function info(parent,message,success=false){let output=parent.querySelector('.mz-promo-feedback');if(!output){output=node('p','mz-promo-feedback');output.setAttribute('role','status');parent.prepend(output)}output.textContent=message;output.classList.toggle('is-success',success);}
   function history(container,records,type){const list=node('div','mz-promo-history');list.append(node('h3','','Histórico de resgates'));const own=records.filter(row=>row.promotion_type===type);if(!own.length)list.append(node('p','mz-promo-note','Nenhum resgate realizado até agora.'));for(const record of own.slice(0,15)){const entry=node('div','mz-promo-line');entry.append(node('span','',`${record.title} • ${String(record.created_at).slice(0,16)}`),node('b','',`${brl(record.amount_minor)} • ${record.status==='COMPLETED'?'Liberado':'Rollover: '+brl(record.wager_progress_minor)+'/'+brl(record.wager_required_minor)}`));list.append(entry)}container.append(list);}
   async function couponSection(container){
-    const box=node('section','mz-promo-box');box.append(node('h3','','Resgatar cupom'));
-    box.append(node('p','mz-promo-note','Digite o código recebido pelos canais oficiais. Cada código pode ser utilizado uma única vez por conta, respeitando o estoque.'));
-    const form=node('form','mz-promo-redeem-form');const input=node('input','mz-promo-field');input.name='coupon';input.maxLength=64;input.required=true;input.pattern='[A-Za-z0-9_-]{4,64}';input.autocomplete='off';input.placeholder='Seu código promocional';input.setAttribute('aria-label','Código do cupom');
-    const button=node('button','mz-promo-action','Trocar código');button.type='submit';form.append(input,button);box.append(form);container.append(box);
-    form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{const data=await userApi('/api/promotions/coupons/redeem',{code:input.value.trim().toUpperCase()});info(box,`Cupom resgatado: ${brl(data.award.amount_minor)} creditados na conta ${data.award.account_type}. ${data.award.status==='LOCKED'?'Liberação após rollover de '+brl(data.award.wager_required_minor)+'.':''}`,true);input.value='';document.dispatchEvent(new Event('mz:wallet-updated'));await refresh();}catch(error){info(box,error.message)}finally{button.disabled=false}});
-    if(token())try{const data=await userApi('/api/promotions/status');history(container,data.history||[],'coupons')}catch(error){info(box,error.message)}
+    const shell=node('section','mz-coupon-shell');
+    const hero=node('header','mz-coupon-hero');
+    const heroGrid=node('div','mz-coupon-hero-grid');
+    const heroMain=node('div','mz-coupon-hero-main');
+    const emblem=node('div','mz-coupon-emblem','🎟️');
+    const intro=node('div','mz-coupon-intro');
+    intro.append(node('span','mz-coupon-kicker','CUPONS E RESGATES'),node('h2','','Troca de Recompensas'),node('p','','Uma área premium para resgatar gift codes, bônus promocionais e campanhas especiais com visual mais elegante e organizado.'));
+    const badges=node('div','mz-coupon-badges');
+    for(const item of ['1 uso por conta','Estoque controlado','Canais oficiais'])badges.append(node('span','mz-coupon-badge',item));
+    heroMain.append(emblem,intro,badges);
+
+    const showcase=node('div','mz-coupon-showcase');
+    const ticket=node('div','mz-coupon-ticket');
+    ticket.append(node('span','mz-coupon-ticket-top','RESGATE PREMIUM'),node('strong','mz-coupon-ticket-title','Bônus, cupom e prêmio especial'),node('p','mz-coupon-ticket-copy','Use apenas códigos válidos liberados pela plataforma para receber recompensas conforme a campanha ativa.'));
+    const ticketMeta=node('div','mz-coupon-ticket-meta');
+    for(const [label,value] of [['Validação','Instantânea'],['Histórico','Automático']]){const item=node('div','mz-coupon-ticket-stat');item.append(node('small','',label),node('b','',value));ticketMeta.append(item)}
+    ticket.append(ticketMeta);
+    showcase.append(ticket);
+    heroGrid.append(heroMain,showcase);
+    hero.append(heroGrid);
+    shell.append(hero);
+
+    const grid=node('div','mz-coupon-grid');
+    const box=node('section','mz-coupon-card mz-coupon-redeem');
+    box.append(node('h3','','Resgatar cupom'));
+    box.append(node('p','mz-coupon-note','Digite o código recebido pelos canais oficiais. Cada código pode ser utilizado uma única vez por conta, respeitando o estoque disponível.'));
+    const tips=node('div','mz-coupon-tips');
+    tips.append(node('div','mz-coupon-tip','⚡ Crédito conforme a configuração ativa'),node('div','mz-coupon-tip','🔒 Rollover aplicado somente se o cupom exigir'),node('div','mz-coupon-tip','🧾 Resultado registrado no seu histórico'));
+    box.append(tips);
+    const form=node('form','mz-promo-redeem-form mz-coupon-form');
+    const wrap=node('label','mz-coupon-input-wrap');
+    wrap.append(node('span','mz-coupon-input-icon','🎫'));
+    const input=node('input','mz-promo-field');input.name='coupon';input.maxLength=64;input.required=true;input.pattern='[A-Za-z0-9_-]{4,64}';input.autocomplete='off';input.placeholder='Seu código promocional';input.setAttribute('aria-label','Código do cupom');
+    wrap.append(input);
+    const button=node('button','mz-promo-action mz-coupon-button','Trocar código');button.type='submit';form.append(wrap,button);box.append(form);grid.append(box);
+
+    const side=node('aside','mz-coupon-card mz-coupon-side');
+    side.append(node('h3','','Guia rápido'));
+    const list=node('ul','mz-coupon-points');
+    for(const item of ['Use apenas cupons divulgados pelos canais oficiais.','Cada código respeita limite por conta e quantidade cadastrada.','O prêmio exibido no resgate segue a campanha ativa no Admin.','Se houver requisito de aposta, a liberação ocorre após cumprir o rollover.'])list.append(node('li','',item));
+    side.append(list);
+    const steps=node('div','mz-coupon-steps');
+    for(const [index,text] of [['1','Copie o código recebido'],['2','Cole no campo de resgate'],['3','Confirme e acompanhe o histórico']]){const item=node('div','mz-coupon-step');item.append(node('span','',index),node('p','',text));steps.append(item)}
+    side.append(steps);
+    grid.append(side);
+    shell.append(grid);
+    container.append(shell);
+
+    form.addEventListener('submit',async event=>{event.preventDefault();button.disabled=true;try{const data=await userApi('/api/promotions/coupons/redeem',{code:input.value.trim().toUpperCase()});info(box,`Cupom resgatado: ${brl(data.award.amount_minor)} creditados.${data.award.status==='LOCKED'?' Liberação após rollover de '+brl(data.award.wager_required_minor)+'.':''}`,true);input.value='';document.dispatchEvent(new Event('mz:wallet-updated'));await refresh();}catch(error){info(box,error.message)}finally{button.disabled=false}});
+    if(token())try{const data=await userApi('/api/promotions/status');history(shell,data.history||[],'coupons')}catch(error){info(box,error.message)}
   }
   async function checkinSection(container){
     const box=node('section','mz-promo-box mz-checkin');
@@ -274,8 +327,7 @@
           labelWrap.append(label);wheel.append(labelWrap);
         });
         wheel.append(node('span','mz-roulette-wheel-center','🎁'));wheelWrap.append(wheel);panel.append(wheelWrap);
-        const chance=Number(cfg.win_chance_percent||50);
-        panel.append(node('p','mz-promo-note',`Chance total de ganho: ${chance.toFixed(chance % 1 ? 2 : 0)}%. Prêmios distribuídos em 4 faixas entre ${brl(cfg.reward_min_cents)} e ${brl(cfg.reward_max_cents)}.`));
+        panel.append(node('p','mz-promo-note',`Prêmios disponíveis entre ${brl(cfg.reward_min_cents)} e ${brl(cfg.reward_max_cents)}.`));
         const sources=[];
         if(Number(cfg.spins_per_deposit)>0)sources.push(`${cfg.spins_per_deposit} rodada(s) por depósito pago de pelo menos ${brl(cfg.deposit_min_cents)}`);
         if(Number(cfg.spins_per_referral)>0)sources.push(`${cfg.spins_per_referral} rodada(s) por novo jogador cadastrado pelo seu link`);
@@ -471,10 +523,40 @@
       const spin=node('button','mz-promo-action mz-cashwheel-spin',data.free_spins>0 && progress<target?'🎡 GIRAR AGORA':'Sem rodadas disponíveis');spin.disabled=!(data.free_spins>0&&progress<target);card.append(spin);
       const claim=node('button','mz-cashwheel-claim',progress>=target?'💰 RESGATAR '+brl(target):'Resgate liberado ao atingir a meta');claim.disabled=progress<target;card.append(claim);
       const meta=node('div','mz-cashwheel-meta');meta.append(node('span','',`Validade: ${formatExpiry(session.expires_at)}`));if(Number(cfg.referral_bonus_cents||0)>0)meta.append(node('span','',`Indicação ativa ajuda +${brl(cfg.referral_bonus_cents)}`));meta.append(node('span','',`Faixa por giro: ${brl(Number(cfg.spin_min_cents||0))} até ${brl(Number(cfg.spin_max_cents||0))}`));card.append(meta);
-      spin.addEventListener('click',async()=>{spin.disabled=true;spin.textContent='Girando...';result.textContent='🎯 Girando a roleta premium...';try{const r=await userApi('/api/promotions/cashwheel/spin',{});animateWheel(wheel,Number(r.selected_index||0));await new Promise(x=>setTimeout(x,4200));const newProgress=Number(r.session?.progress_minor||progress);const newPct=target>0?Math.min(100,(newProgress/target)*100):0;top.querySelector('strong').textContent=brl(newProgress);fill.style.width=newPct+'%';meterRow.querySelector('span').textContent=`${newPct.toFixed(2).replace('.',',')}% concluído`;spins.textContent=`${Number(r.free_spins||0)} rodada(s) grátis disponível(is) hoje`;if(r.reward_type==='NO_WIN'){result.textContent='😕 Não ganhou nada. Tente novamente no próximo giro.';}else if(r.reward_type==='CASH_BONUS'){result.textContent=`🎁 Você ganhou ${brl(r.prize_minor)} em bônus direto!`;document.dispatchEvent(new Event('mz:wallet-updated'));}else{result.textContent=`🎉 Você avançou ${brl(r.prize_minor)} rumo à meta!`;}const reached=newProgress>=target;claim.disabled=!reached;claim.textContent=reached?`💰 RESGATAR ${brl(target)}`:'Resgate liberado ao atingir a meta';spin.disabled=Number(r.free_spins||0)<=0||reached;spin.textContent=spin.disabled?'Sem rodadas disponíveis':'🎡 GIRAR AGORA';}catch(e){result.textContent=e.message;spin.disabled=false;spin.textContent='🎡 GIRAR AGORA';}});
+      spin.addEventListener('click',async()=>{spin.disabled=true;spin.textContent='Girando...';result.textContent='🎯 Girando a roleta premium...';try{const r=await userApi('/api/promotions/cashwheel/spin',{});document.dispatchEvent(new Event('mz:promotion-updated'));animateWheel(wheel,Number(r.selected_index||0));await new Promise(x=>setTimeout(x,4200));const newProgress=Number(r.session?.progress_minor||progress);const newPct=target>0?Math.min(100,(newProgress/target)*100):0;top.querySelector('strong').textContent=brl(newProgress);fill.style.width=newPct+'%';meterRow.querySelector('span').textContent=`${newPct.toFixed(2).replace('.',',')}% concluído`;spins.textContent=`${Number(r.free_spins||0)} rodada(s) grátis disponível(is) hoje`;if(r.reward_type==='NO_WIN'){result.textContent='😕 Não ganhou nada. Tente novamente no próximo giro.';}else if(r.reward_type==='CASH_BONUS'){result.textContent=`🎁 Você ganhou ${brl(r.prize_minor)} em bônus direto!`;document.dispatchEvent(new Event('mz:wallet-updated'));}else{result.textContent=`🎉 Você avançou ${brl(r.prize_minor)} rumo à meta!`;}const reached=newProgress>=target;claim.disabled=!reached;claim.textContent=reached?`💰 RESGATAR ${brl(target)}`:'Resgate liberado ao atingir a meta';spin.disabled=Number(r.free_spins||0)<=0||reached;spin.textContent=spin.disabled?'Sem rodadas disponíveis':'🎡 GIRAR AGORA';}catch(e){result.textContent=e.message;spin.disabled=false;spin.textContent='🎡 GIRAR AGORA';}});
       claim.addEventListener('click',async()=>{claim.disabled=true;claim.textContent='Resgatando...';try{const r=await userApi('/api/promotions/cashwheel/claim',{});document.dispatchEvent(new Event('mz:wallet-updated'));result.textContent=`✅ ${brl(r.award.amount_minor)} resgatados com sucesso!`;claim.textContent='Resgatado';}catch(e){result.textContent=e.message;claim.disabled=false;claim.textContent='💰 RESGATAR '+brl(target);}});
       shell.append(card);
       if(data.history?.length){const hist=node('details','mz-cashwheel-history');hist.append(node('summary','','Histórico de giros'));for(const h of data.history.slice(0,10)){const desc=h.reward_type==='NO_WIN'?'Sem prêmio':h.reward_type==='CASH_BONUS'?`Bônus direto ${brl(h.prize_minor)}`:`Avanço +${brl(h.prize_minor)}`;hist.append(node('p','',`${String(h.created_at).slice(0,16)} • ${desc}`));}shell.append(hist);}
+    };
+    await paint();
+  }
+
+  async function lotterySection(container){
+    const shell=node('section','mz-lottery mz-promo-box');container.append(shell);
+    const paint=async()=>{
+      shell.replaceChildren();shell.append(node('h3','','🃏 Sorteio de Cartas'));
+      if(!token()){shell.append(node('p','mz-promo-note','Entre na sua conta para participar do sorteio.'));return;}
+      let data;try{data=await userApi('/api/promotions/lottery/status');}catch(e){info(shell,e.message);return;}
+      if(!data.active){shell.append(node('p','mz-promo-note','Sorteio indisponível no momento.'));return;}
+      const cfg=data.campaign?.config||{};
+      const card=node('article','mz-lottery-card');
+      const hero=node('div','mz-lottery-hero');hero.append(node('span','mz-lottery-kicker','COLECIONE E GANHE'),node('h4','','Complete HAPPY'),node('p','',`Complete as 5 cartas e resgate ${brl(Number(cfg.collection_bonus_cents||0))}.`));card.append(hero);
+      const stage=node('div','mz-lottery-stage');stage.append(node('div','mz-lottery-pointer','▼'));
+      const wheel=node('div','mz-lottery-wheel');
+      ['H','A','P','P','Y','Nada'].forEach((letter,index)=>{const seg=node('span','mz-lottery-wheel-letter'+(index===5?' is-no-win':''),letter);seg.style.setProperty('--lottery-index',String(index));wheel.append(seg);});
+      wheel.append(node('span','mz-lottery-center','🎁'));stage.append(wheel);card.append(stage);
+      const spins=node('div','mz-lottery-spins',`${Number(data.free_spins||0)} rodada(s) disponível(is) hoje`);card.append(spins);
+      const collection=node('div','mz-lottery-collection');
+      (data.slots||[]).forEach((slot,index)=>{const tile=node('div','mz-lottery-letter-card'+(Number(slot.have)>=Number(slot.need)?' is-owned':''));tile.append(node('strong','',slot.letter),node('small','',`x${Number(slot.count??slot.have??0)}`));collection.append(tile);});
+      card.append(collection);
+      const status=node('div','mz-lottery-status',data.complete?'🎉 Coleção completa! Seu prêmio está pronto para resgate.':'Colete H • A • P • P • Y para liberar o prêmio.');card.append(status);
+      const spin=node('button','mz-promo-action mz-lottery-spin',data.free_spins>0&&!data.complete?'🎡 GIRAR SORTEIO':data.complete?'Coleção completa':'Sem rodadas disponíveis');spin.type='button';spin.disabled=!(data.free_spins>0&&!data.complete);card.append(spin);
+      const claim=node('button','mz-lottery-claim',data.complete?`🎁 RESGATAR ${brl(Number(cfg.collection_bonus_cents||0))}`:'Complete HAPPY para resgatar');claim.type='button';claim.disabled=!data.complete;card.append(claim);
+      let lotteryRotation=0;
+      spin.addEventListener('click',async()=>{spin.disabled=true;spin.textContent='Girando...';status.textContent='🎯 Sorteando sua carta...';try{const r=await userApi('/api/promotions/lottery/spin',{});document.dispatchEvent(new Event('mz:promotion-updated'));const index=Number(r.selected_index||0),step=360/6,target=(360-(index*step))%360,normalized=((lotteryRotation%360)+360)%360,delta=(target-normalized+360)%360;lotteryRotation+=360*6+delta;wheel.classList.add('is-spinning');wheel.style.transform=`rotate(${lotteryRotation}deg)`;await new Promise(resolve=>setTimeout(resolve,3600));wheel.classList.remove('is-spinning');status.textContent=r.reward_type==='NO_WIN'?'😕 Não ganhou nada nesta rodada. Tente novamente!':`🃏 Você recebeu a carta ${r.letter}!`;spins.textContent=`${Number(r.free_spins||0)} rodada(s) disponível(is) hoje`;const updatedSlots=Array.isArray(r.slots)?r.slots:[];collection.querySelectorAll('.mz-lottery-letter-card').forEach((tile,i)=>{const slot=updatedSlots[i];if(!slot)return;const owned=Number(slot.have)>=Number(slot.need);tile.classList.toggle('is-owned',owned);const small=tile.querySelector('small');if(small)small.textContent=`x${Number(slot.count??slot.have??0)}`;});const complete=!!r.complete;claim.disabled=!complete;claim.textContent=complete?`🎁 RESGATAR ${brl(Number(cfg.collection_bonus_cents||0))}`:'Complete HAPPY para resgatar';spin.disabled=Number(r.free_spins||0)<=0||complete;spin.textContent=complete?'Coleção completa':spin.disabled?'Sem rodadas disponíveis':'🎡 GIRAR SORTEIO';}catch(e){wheel.classList.remove('is-spinning');status.textContent=e.message;spin.disabled=false;spin.textContent='🎡 GIRAR SORTEIO';}});
+      claim.addEventListener('click',async()=>{claim.disabled=true;claim.textContent='Resgatando...';try{const r=await userApi('/api/promotions/lottery/claim',{});document.dispatchEvent(new Event('mz:wallet-updated'));status.textContent=`✅ Prêmio de ${brl(r.award.amount_minor)} resgatado! Uma nova coleção foi iniciada.`;setTimeout(paint,850);}catch(e){status.textContent=e.message;claim.disabled=false;claim.textContent=`🎁 RESGATAR ${brl(Number(cfg.collection_bonus_cents||0))}`;}});
+      shell.append(card);
+      if(data.history?.length){const hist=node('details','mz-lottery-history');hist.append(node('summary','','Histórico de cartas'));for(const h of data.history.slice(0,12))hist.append(node('p','',`${String(h.created_at).slice(0,16)} • ${h.result_letter==='N'?'Não ganhou nada':'Carta '+h.result_letter}`));shell.append(hist);}
     };
     await paint();
   }
@@ -489,8 +571,8 @@
     rescue:['São consideradas apenas apostas e ganhos PlayFiver registrados como concluídos na conta CASH. A perda líquida do período é a diferença positiva entre apostas e ganhos; depósitos e bônus não entram no cálculo.','A apuração usa o dia anterior completo, de 00h a 00h no horário de Brasília. Somente dias a partir da data efetiva de ativação no Admin entram na campanha.','A maior faixa de perda mínima alcançada determina a taxa aplicada; a recompensa é arredondada para baixo em centavos.','O fundo é solicitado no dia seguinte ao da perda; se não for resgatado nesse dia, expira. Após receber, o bônus fica sujeito ao rollover indicado no card.'],
     vip:['O progresso de upgrade utiliza apostas válidas confirmadas e a meta acumulada de cada nível.','Cada nível pode ter bônus de upgrade, diário, semanal e mensal e uma meta de manutenção; valores não configurados não geram recompensa.','O programa pode preservar o nível e suspender benefícios ou aplicar redução mensal, conforme a regra definida no Admin.','Benefícios recorrentes são gerados pela rotina do servidor e precisam estar disponíveis antes do resgate; valores com rollover exigem apostas válidas para liberação.'],
     cashwheel:['Você recebe a quantidade diária de rodadas gratuitas definida no Admin. Resultados de avanço aumentam apenas o saldo interno da campanha e não entram na carteira.','O primeiro giro de avanço pode aproximar o saldo de até 90% da meta; os giros seguintes acrescentam valores menores. Também pode existir a opção "Não ganhou nada, tente novamente".','Somente a opção específica de bônus direto em moeda credita um prêmio antes da meta. Fora dessa opção, o saldo só pode ser resgatado após alcançar 100% da meta.','Indicações válidas podem acrescentar ajuda ao saldo interno. A campanha possui prazo de validade e, se a meta não for atingida, a sessão expira conforme a configuração.'],
-    lottery:['A campanha pode prever giros por dia e recompensa por completar uma coleção de cartas.','A composição, o resultado e as condições de cada rodada serão definidos quando o sorteio for implementado.','Giros, coleção e resgates ainda não estão disponíveis nesta versão.'],
-    roulette:['Depósitos PAID de valor igual ou superior ao mínimo dão rodadas; só contam pagamentos iniciados após a ativação.','Cada novo usuário ativo cadastrado pelo seu link após a ativação gera as rodadas configuradas, mesmo sem depósito. O mesmo evento não concede rodadas duas vezes.','O Admin define a chance total de ganho em %, o intervalo mínimo e máximo de prêmio e o rollover. A roleta exibe 4 faixas premiadas e 4 faixas sem prêmio apenas como representação visual.','Cada giro consome 1 rodada e o resultado é apurado no servidor; se houver prêmio, o crédito vai para CASH ou BONUS conforme o rollover configurado.'],
+    lottery:['Você recebe a quantidade diária de giros configurada no Admin. A roleta possui H, A, P, P, Y e a opção Não ganhou nada.','As letras podem se repetir e continuam acumuladas na sua coleção, por exemplo H x10, A x4 ou P x7.','Para completar a coleção é necessário ter pelo menos H x1, A x1, P x2 e Y x1. Quando faltar somente a última letra necessária, ela se torna muito mais rara.','O prêmio configurado é liberado ao completar HAPPY. Depois do resgate uma nova coleção começa, mantendo o histórico anterior.'],
+    roulette:['Depósitos PAID de valor igual ou superior ao mínimo dão rodadas; só contam pagamentos iniciados após a ativação.','Cada novo usuário ativo cadastrado pelo seu link após a ativação gera as rodadas configuradas, mesmo sem depósito. O mesmo evento não concede rodadas duas vezes.','O Admin define o intervalo mínimo e máximo de prêmio e o rollover. A roleta exibe faixas premiadas e faixas sem prêmio como representação visual.','Cada giro consome 1 rodada e o resultado é apurado no servidor; se houver prêmio, o crédito vai para CASH ou BONUS conforme o rollover configurado.'],
   };
   const ruleFields={
     agency:[['level','Faixa','integer'],['team_bet_min_cents','Meta de apostas da equipe','money'],['commission_percent','Comissão indicada','percent']],
@@ -501,7 +583,7 @@
     vip:[['level','VIP','integer'],['goal_cents','Meta acumulada','money'],['maintenance_cents','Manutenção mensal','money'],['bonus_cents','Upgrade','money'],['daily_bonus_cents','Diário','money'],['weekly_bonus_cents','Semanal','money'],['monthly_bonus_cents','Mensal','money'],['rollover_x','Rollover','multiple']],
     cashwheel:[['target_cents','Meta de saldo','money'],['duration_days','Validade (dias)','integer'],['free_spins_per_day','Rodadas por dia','integer'],['spin_min_cents','Prêmio mínimo por giro','money'],['spin_max_cents','Prêmio máximo por giro','money'],['referral_bonus_cents','Ajuda por indicação','money'],['rollover_x','Rollover','multiple']],
     lottery:[['spins_per_day','Rodadas por dia','integer'],['collection_bonus_cents','Prêmio da coleção','money'],['rollover_x','Rollover','multiple']],
-    roulette:[['deposit_min_cents','Depósito mínimo','money'],['spins_per_deposit','Rodadas por depósito','integer'],['spins_per_referral','Rodadas por indicação','integer'],['win_chance_percent','Chance de ganho','percent'],['reward_min_cents','Prêmio mínimo previsto','money'],['reward_max_cents','Prêmio máximo previsto','money'],['rollover_x','Rollover','multiple']],
+    roulette:[['deposit_min_cents','Depósito mínimo','money'],['spins_per_deposit','Rodadas por depósito','integer'],['spins_per_referral','Rodadas por indicação','integer'],['reward_min_cents','Prêmio mínimo previsto','money'],['reward_max_cents','Prêmio máximo previsto','money'],['rollover_x','Rollover','multiple']],
   };
   function appendRules(container,mod){
     const panel=node('details','mz-promo-rules');
@@ -510,34 +592,191 @@
     const body=node('div','mz-promo-rules-body');
     const steps=node('ol','mz-promo-rules-steps');for(const text of (ruleTexts[mod.id]||[]))steps.append(node('li','',text));body.append(steps);
     const active=mod.id==='rebate'?[]:configs.filter(item=>item.type===mod.type);
-    if(active.length){
-      body.append(node('h4','','Condições publicadas nesta campanha'));
-      for(const item of active){
-        const group=node('div','mz-promo-rules-campaign');group.append(node('h5','',item.title));
-        const list=node('dl','mz-promo-rules-values');
-        for(const [key,label,kind] of (ruleFields[mod.id]||[])){
-          if(item.config?.[key]===undefined||item.config?.[key]===null)continue;
-          const line=node('div','');line.append(node('dt','',label),node('dd','',fmt(item.config[key],kind)));list.append(line);
+    if(!hiddenCampaignSummaryModules.has(mod.id)){
+      if(active.length){
+        body.append(node('h4','','Condições publicadas nesta campanha'));
+        for(const item of active){
+          const group=node('div','mz-promo-rules-campaign');group.append(node('h5','',item.title));
+          const list=node('dl','mz-promo-rules-values');
+          for(const [key,label,kind] of (ruleFields[mod.id]||[])){
+            if(item.config?.[key]===undefined||item.config?.[key]===null)continue;
+            const line=node('div','');line.append(node('dt','',label),node('dd','',fmt(item.config[key],kind)));list.append(line);
+          }
+          group.append(list);body.append(group);
         }
-        group.append(list);body.append(group);
-      }
-    }else if(mod.id!=='rebate')body.append(node('p','mz-promo-rules-muted','Não há configurações ativas publicadas no momento.'));
-    body.append(node('p','mz-promo-rules-muted','Condições exibidas conforme as configurações ativas. A disponibilidade do benefício depende das validações do sistema.'));
+      }else if(mod.id!=='rebate')body.append(node('p','mz-promo-rules-muted','Não há configurações ativas publicadas no momento.'));
+      body.append(node('p','mz-promo-rules-muted','Condições exibidas conforme as configurações ativas. A disponibilidade do benefício depende das validações do sistema.'));
+    }
     panel.append(body);container.append(panel);
   }
 
   function node(tag,cls,text){const el=document.createElement(tag);if(cls)el.className=cls;if(text!==undefined)el.textContent=text;return el;}
   const fmt=(value,kind)=>kind==='money'?new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format((Number(value)||0)/100):kind==='percent'?(Number(value)||0).toLocaleString('pt-BR')+'%':kind==='multiple'?String(value??0)+'x':String(value??'—');
-  for(const mod of definitions){const btn=node('button','mz-promo-tile');btn.type='button';btn.dataset.promo=mod.id;btn.append(node('span','',mod.icon),node('strong','',mod.title),node('small','',mod.desc));directory.append(btn);}
-  async function refresh(){
-    const response=await fetch(base+'/api/promotions/configs',{headers:{Accept:'application/json'},credentials:'same-origin'});
-    if(!response.ok)throw Error('Não foi possível consultar as configurações. Execute a migração 018.');
-    const payload=await response.json();configs=Array.isArray(payload.items)?payload.items:[];
+  function activeConfigsFor(mod){return configs.filter(item=>item.type===mod.type);}
+  function isModuleAvailable(mod){return activeConfigsFor(mod).length>0;}
+  function availabilityState(mod){
+    const published=isModuleAvailable(mod);
+    const fallback=published?{available:false,label:token()?'Consultando…':'Entre para consultar',detail:token()?'Disponibilidade ainda não confirmada':'Faça login para verificar'}:{available:false,label:'Indisponível',detail:'Em preparação'};
+    return availabilityByModule[mod.id]||fallback;
   }
-  function showIndex(){detail.classList.add('hidden');detail.replaceChildren();directory.classList.remove('hidden');section?.classList.remove('promo-detail-mode');}
+  async function safeStatus(path){
+    try{return {ok:true,data:await userApi(path)};}catch(error){return {ok:false,error};}
+  }
+  async function loadAvailabilityStates(){
+    const states={
+      coupons:{available:false,label:'Indisponível',detail:isModuleAvailable(definitions.find(item=>item.id==='coupons'))?'Use seu código promocional':'Em preparação'}
+    };
+    if(!token())return {states,snapshots:{}};
+    const [roulette,cashwheel,checkin,chests,agency,rebate,rescue,lottery,vipStatus,vipBenefits]=await Promise.all([
+      safeStatus('/api/promotions/roulette/status'),
+      safeStatus('/api/promotions/cashwheel/status'),
+      safeStatus('/api/promotions/status'),
+      safeStatus('/api/promotions/chests/status'),
+      safeStatus('/api/promotions/agency/status'),
+      safeStatus('/api/promotions/rebate/status'),
+      safeStatus('/api/promotions/rescue/status'),
+      safeStatus('/api/promotions/lottery/status'),
+      safeStatus('/api/promotions/vip/status'),
+      safeStatus('/api/promotions/vip/benefits'),
+    ]);
+
+    if(roulette.ok){
+      const campaigns=Array.isArray(roulette.data.campaigns)?roulette.data.campaigns:[];
+      const spins=campaigns.reduce((sum,row)=>sum+Number(row.available_spins||0),0);
+      states.roulette={available:spins>0,label:spins>0?'Disponível':'Indisponível',detail:spins>0?`${spins} giro(s) disponível(is)`:'Sem giros disponíveis'};
+    }
+    if(cashwheel.ok){
+      const session=cashwheel.data.session||{};const target=Number(cashwheel.data.campaign?.config?.target_cents||0);const progress=Number(session.progress_minor||0);const spins=Number(cashwheel.data.free_spins||0);const claimable=target>0&&progress>=target;
+      states.cashwheel={available:claimable||spins>0,label:claimable||spins>0?'Disponível':'Indisponível',detail:claimable?'Meta concluída • resgate liberado':spins>0?`${spins} rodada(s) disponível(is)`:'Sem rodadas disponíveis'};
+    }
+    if(checkin.ok){
+      const available=!!checkin.data.available_today;
+      const claimed=!!checkin.data.claimed_today;
+      states.checkin={available,label:available?'Disponível':'Indisponível',detail:available?'Check-in de hoje disponível':claimed?'Check-in de hoje já resgatado':'Requisitos pendentes'};
+    }
+    if(chests.ok){
+      const campaigns=Array.isArray(chests.data.campaigns)?chests.data.campaigns:[];
+      const total=campaigns.filter(item=>item.available).length;
+      states.chests={available:total>0,label:total>0?'Disponível':'Indisponível',detail:total>0?`${total} baú(s) disponível(is)`:'Sem baús disponíveis'};
+    }
+    if(agency.ok){
+      const balance=Number(agency.data.affiliate_balance_minor||0);
+      states.agency={available:balance>0,label:balance>0?'Disponível':'Indisponível',detail:balance>0?`Saldo de afiliado ${brl(balance)}`:'Sem comissão disponível'};
+    }
+    if(rebate.ok){
+      const amount=Number(rebate.data.available_minor||0);const min=Number(rebate.data.settings?.min_claim_minor||0);const claimable=!!rebate.data.settings?.enabled&&amount>=min&&amount>0;
+      states.rebate={available:claimable,label:claimable?'Disponível':'Indisponível',detail:claimable?`Rebate ${brl(amount)} disponível`:'Sem rebate disponível'};
+    }
+    if(rescue.ok){
+      const current=rescue.data.current||{};const claimable=current.state==='AVAILABLE'&&Number(current.amount_minor||0)>0;
+      states.rescue={available:claimable,label:claimable?'Disponível':'Indisponível',detail:claimable?`Fundo ${brl(current.amount_minor)} disponível`:'Sem fundo disponível hoje'};
+    }
+    if(lottery.ok){
+      const spins=Number(lottery.data.free_spins||0);const complete=!!lottery.data.complete;
+      states.lottery={available:complete||spins>0,label:complete||spins>0?'Disponível':'Indisponível',detail:complete?'Coleção completa • prêmio disponível':spins>0?`${spins} rodada(s) disponível(is)`:'Sem rodadas disponíveis'};
+    }
+    const snapshots={roulette,cashwheel,checkin,chests,agency,rebate,rescue,lottery,vipStatus,vipBenefits};
+    const vipReached=vipStatus.ok&&Array.isArray(vipStatus.data.levels)?vipStatus.data.levels.filter(level=>level.reached&&!level.award&&Number(level.bonus_minor||0)>0).length:0;
+    const vipRecurring=vipBenefits.ok&&Array.isArray(vipBenefits.data.benefits)?vipBenefits.data.benefits.filter(item=>item.state==='AVAILABLE').length:0;
+    const vipAvailable=(vipReached+vipRecurring)>0;
+    if(vipStatus.ok||vipBenefits.ok)states.vip={available:vipAvailable,label:vipAvailable?'Disponível':'Indisponível',detail:vipRecurring>0?`${vipRecurring} benefício(s) VIP disponível(is)`:vipReached>0?'Upgrade VIP disponível':'Sem bônus VIP disponível'};
+    return {states,snapshots};
+  }
+  function centralEventHistory(){
+    // O endpoint de resgates é a fonte contábil única para bônus; nunca tratar avanço de roleta como crédito.
+    const source=rewardSnapshots.checkin;
+    if(!source?.ok||!Array.isArray(source.data.history))return [];
+    const names=Object.fromEntries(definitions.map(mod=>[mod.type,mod.title]));
+    return source.data.history.slice(0,8).map(item=>({
+      id:item.id||'',name:names[item.promotion_type]||String(item.title||'Recompensa'),
+      amount:brl(item.amount_minor),date:String(item.created_at||'').slice(0,16).replace('T',' '),
+      status:item.status==='COMPLETED'?'Liberado':item.status==='LOCKED'?'Com rollover':String(item.status||'Registrado')
+    }));
+  }
+  function renderRewardsCenter(){
+    if(!rewardsCenter)return;
+    rewardsCenter.replaceChildren();
+    if(!token()){
+      const guest=node('section','mz-center-guest');
+      guest.append(node('span','mz-center-eyebrow','✦ CENTRAL DE RECOMPENSAS'),node('h2','','Seus benefícios em um só lugar'),node('p','','Entre na sua conta para consultar giros, resgates e recompensas disponíveis.'));
+      rewardsCenter.append(guest);return;
+    }
+    const available=orderedModules().filter(mod=>availabilityState(mod).available);
+    const pending=orderedModules().filter(mod=>!availabilityState(mod).available&&isModuleAvailable(mod));
+    const historyItems=centralEventHistory();
+    const hero=node('section','mz-center-hero');
+    const title=node('div','mz-center-hero-title');
+    title.append(node('span','mz-center-eyebrow','✦ CENTRAL DE RECOMPENSAS'),node('h2','','Suas recompensas'),node('p','','Benefícios, giros e resgates consultados diretamente na sua conta.'));
+    hero.append(title);
+    const metrics=node('div','mz-center-metrics');
+    for(const [value,label] of [[String(available.length),'Módulos disponíveis'],[String(pending.length),'Sem resgate no momento'],[historyItems.length?String(historyItems.length):'0','Registros recentes']]){
+      const metric=node('div','mz-center-metric');metric.append(node('strong','',value),node('span','',label));metrics.append(metric);
+    }
+    hero.append(metrics);rewardsCenter.append(hero);
+    const availableSection=node('section','mz-center-section');
+    availableSection.append(node('h3','','Disponíveis para você'));
+    if(!available.length)availableSection.append(node('p','mz-center-empty','Nenhum benefício confirmado no momento. Consulte os módulos abaixo para acompanhar seus requisitos.'));
+    else{
+      const list=node('div','mz-center-list');
+      for(const mod of available){
+        const state=availabilityState(mod);
+        const button=node('button','mz-center-item is-ready');button.type='button';button.dataset.promo=mod.id;
+        button.append(node('span','mz-center-item-icon',mod.icon));
+        const body=node('span','mz-center-item-body');body.append(node('strong','',mod.title),node('small','',state.detail));
+        button.append(body,node('span','mz-center-item-action','Ver benefício →'));list.append(button);
+      }
+      availableSection.append(list);
+    }
+    rewardsCenter.append(availableSection);
+    const disclosure=node('details','mz-center-details');
+    disclosure.append(node('summary','',`Outros módulos · ${pending.length}`));
+    const others=node('div','mz-center-other-list');
+    for(const mod of pending){
+      const button=node('button','mz-center-other');button.type='button';button.dataset.promo=mod.id;
+      button.append(node('span','',`${mod.icon} ${mod.title}`),node('small','',availabilityState(mod).detail));others.append(button);
+    }
+    if(!pending.length)others.append(node('p','mz-center-empty','Nenhum outro módulo ativo.'));
+    disclosure.append(others);rewardsCenter.append(disclosure);
+    const events=node('section','mz-center-history');events.append(node('h3','','Últimos resgates'));
+    if(!rewardSnapshots.checkin?.ok)events.append(node('p','mz-center-empty','Histórico indisponível para consulta agora.'));
+    else if(!historyItems.length)events.append(node('p','mz-center-empty','Você ainda não possui resgates registrados.'));
+    else for(const item of historyItems){
+      const line=node('div','mz-center-history-line');
+      const left=node('div','');left.append(node('strong','',item.name),node('small','',item.date));
+      const right=node('div','');right.append(node('strong','',item.amount),node('small','',item.status));
+      line.append(left,right);events.append(line);
+    }
+    rewardsCenter.append(events);
+  }
+  function renderPromotionDirectory(){
+    directory.replaceChildren();
+    for(const mod of orderedModules()){
+      const state=availabilityState(mod);
+      const btn=node('button','mz-promo-tile'+(state.available?' is-available':''));btn.type='button';btn.dataset.promo=mod.id;
+      const icon=node('span','mz-promo-tile-icon',mod.icon);
+      const body=node('span','mz-promo-tile-body');body.append(node('strong','',mod.title),node('small','',mod.desc));
+      const status=node('span','mz-promo-tile-status'+(state.available?' is-available':''),state.label);
+      const meta=node('span','mz-promo-tile-meta',state.detail);
+      btn.append(icon,body,status,meta);directory.append(btn);
+    }
+  }
+  async function refresh(){
+    const version=++availabilityRefreshVersion;
+    const response=await fetch(base+'/api/promotions/configs',{headers:{Accept:'application/json'},credentials:'same-origin',cache:'no-store'});
+    if(!response.ok)throw Error('Não foi possível consultar as configurações. Execute a migração 018.');
+    const payload=await response.json();
+    if(version!==availabilityRefreshVersion)return;
+    configs=Array.isArray(payload.items)?payload.items:[];
+    const result=await loadAvailabilityStates();
+    if(version!==availabilityRefreshVersion)return;
+    availabilityByModule=result.states;rewardSnapshots=result.snapshots;
+    renderPromotionDirectory();renderRewardsCenter();
+  }
+  function refreshAvailability(){refresh().catch(error=>{console.error('Falha ao atualizar disponibilidade das promoções:',error);});}
+  function showIndex(){detail.classList.add('hidden');detail.replaceChildren();directory.classList.remove('hidden');section?.classList.remove('promo-detail-mode');refreshAvailability();}
   function openModule(id){
     const mod=definitions.find(m=>m.id===id);if(!mod)return;
-    const minimalLayout=new Set(['checkin','vip','chests','agency','rebate','rescue','roulette','cashwheel']);
+    const minimalLayout=new Set(['coupons','checkin','vip','chests','agency','rebate','rescue','roulette','cashwheel','lottery']);
     directory.classList.add('hidden');detail.classList.remove('hidden');detail.replaceChildren();section?.classList.add('promo-detail-mode');
     const back=node('button','mz-promo-back','← Voltar às promoções');back.type='button';back.addEventListener('click',showIndex);detail.append(back);
     if(!minimalLayout.has(mod.id)){
@@ -552,6 +791,7 @@
     else if(mod.id==='rescue')rescueSection(detail);
     else if(mod.id==='roulette')rouletteSection(detail);
     else if(mod.id==='cashwheel')cashwheelSection(detail);
+    else if(mod.id==='lottery')lotterySection(detail);
     else{const status=node('section','mz-promo-box');status.append(node('h3','','Disponibilidade'));
       status.append(node('p','mz-promo-note','Módulo em preparação. Os resgates desta promoção ainda não estão habilitados.'));const action=node('button','mz-promo-action','Resgate indisponível');action.type='button';action.disabled=true;status.append(action);detail.append(status);}
     appendRules(detail,mod);
@@ -559,9 +799,13 @@
   }
   document.addEventListener('mz:open-promotion',event=>{if(definitions.some(item=>item.id===event.detail?.id))openModule(event.detail.id);});
   directory.addEventListener('click',event=>{const button=event.target.closest('button[data-promo]');if(button)openModule(button.dataset.promo);});
+  rewardsCenter?.addEventListener('click',event=>{const button=event.target.closest('button[data-promo]');if(button)openModule(button.dataset.promo);});
   document.querySelectorAll('[data-section="promotions"]').forEach(button=>button.addEventListener('click',showIndex));
-  document.addEventListener('mz:auth-ready',()=>setTimeout(maybeOpenEnvelope,180));
-  document.addEventListener('mz:wallet-updated',()=>setTimeout(maybeOpenEnvelope,250));
+  document.addEventListener('mz:auth-ready',()=>{refreshAvailability();setTimeout(maybeOpenEnvelope,180);});
+  document.addEventListener('mz:auth-changed',()=>{availabilityRefreshVersion++;availabilityByModule={};rewardSnapshots={};renderRewardsCenter();renderPromotionDirectory();refreshAvailability();});
+  document.addEventListener('mz:section-changed',event=>{if(event.detail?.name==='promotions')refreshAvailability();});
+  document.addEventListener('mz:wallet-updated',()=>{refreshAvailability();setTimeout(maybeOpenEnvelope,250);});
+  document.addEventListener('mz:promotion-updated',refreshAvailability);
   refresh().catch(error=>{directory.prepend(node('p','mz-promo-status',error.message));});
   setTimeout(maybeOpenEnvelope,350);
 })();
