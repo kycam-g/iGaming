@@ -9,7 +9,8 @@ use PDO;
 
 final class NotificationService
 {
-    private const CATEGORIES=['announcement','system','user','support'];
+    private const CATEGORIES=['announcement','financial','promotion','security','support','system','user'];
+    private const PRIORITIES=['normal','high','urgent'];
     private const AUDIENCES=['ALL','USER'];
 
     private function db():PDO{return Database::connection();}
@@ -17,7 +18,7 @@ final class NotificationService
     public function forUser(string $userId):array
     {
         $db=$this->db();
-        $stmt=$db->prepare("SELECT n.id,n.category,n.title,n.message,n.link_path,n.created_at,CASE WHEN r.notification_id IS NULL THEN 0 ELSE 1 END AS is_read FROM platform_notifications n LEFT JOIN user_notification_reads r ON r.notification_id=n.id AND r.user_id=? WHERE n.enabled=1 AND (n.starts_at IS NULL OR n.starts_at<=NOW()) AND (n.ends_at IS NULL OR n.ends_at>=NOW()) AND (n.audience='ALL' OR (n.audience='USER' AND n.user_id=?)) ORDER BY is_read ASC,n.created_at DESC,n.id DESC LIMIT 100");
+        $stmt=$db->prepare("SELECT n.id,n.category,n.priority,n.title,n.message,n.link_path,n.created_at,CASE WHEN r.notification_id IS NULL THEN 0 ELSE 1 END AS is_read FROM platform_notifications n LEFT JOIN user_notification_reads r ON r.notification_id=n.id AND r.user_id=? WHERE n.enabled=1 AND (n.starts_at IS NULL OR n.starts_at<=NOW()) AND (n.ends_at IS NULL OR n.ends_at>=NOW()) AND (n.audience='ALL' OR (n.audience='USER' AND n.user_id=?)) ORDER BY is_read ASC,n.created_at DESC,n.id DESC LIMIT 100");
         $stmt->execute([$userId,$userId]);
         $items=$stmt->fetchAll();
         $unread=0;foreach($items as &$item){$item['id']=(int)$item['id'];$item['is_read']=(bool)$item['is_read'];if(!$item['is_read'])$unread++;}unset($item);
@@ -42,7 +43,7 @@ final class NotificationService
 
     public function adminList():array
     {
-        $sql="SELECT n.id,n.category,n.audience,n.user_id,n.title,n.message,n.link_path,n.enabled,n.starts_at,n.ends_at,n.created_at,n.updated_at,u.public_id,u.username FROM platform_notifications n LEFT JOIN users u ON u.id=n.user_id ORDER BY n.id DESC LIMIT 300";
+        $sql="SELECT n.id,n.category,n.priority,n.audience,n.user_id,n.title,n.message,n.link_path,n.enabled,n.starts_at,n.ends_at,n.created_at,n.updated_at,u.public_id,u.username FROM platform_notifications n LEFT JOIN users u ON u.id=n.user_id ORDER BY n.id DESC LIMIT 300";
         $rows=$this->db()->query($sql)->fetchAll();
         foreach($rows as &$row){$row['id']=(int)$row['id'];$row['enabled']=(bool)$row['enabled'];}unset($row);return $rows;
     }
@@ -51,6 +52,7 @@ final class NotificationService
     {
         $db=$this->db();$id=max(0,(int)($input['id']??0));
         $category=strtolower(trim((string)($input['category']??'')));if(!in_array($category,self::CATEGORIES,true))throw new DomainException('Categoria de notificação inválida.');
+        $priority=strtolower(trim((string)($input['priority']??'normal')));if(!in_array($priority,self::PRIORITIES,true))throw new DomainException('Prioridade de notificação inválida.');
         $audience=strtoupper(trim((string)($input['audience']??'ALL')));if(!in_array($audience,self::AUDIENCES,true))throw new DomainException('Público da notificação inválido.');
         $title=trim((string)($input['title']??''));$message=trim((string)($input['message']??''));
         if($title===''||mb_strlen($title)>120)throw new DomainException('Informe um título de até 120 caracteres.');
@@ -60,9 +62,9 @@ final class NotificationService
         $userId=null;
         if($audience==='USER'){$identifier=trim((string)($input['user_identifier']??$input['user_id']??''));if($identifier==='')throw new DomainException('Informe o jogador destinatário.');$userId=$this->resolveUser($db,$identifier);if(!$userId)throw new DomainException('Jogador destinatário não encontrado.');}
         $enabled=filter_var($input['enabled']??true,FILTER_VALIDATE_BOOLEAN)?1:0;
-        $args=['category'=>$category,'audience'=>$audience,'user_id'=>$userId,'title'=>$title,'message'=>$message,'link_path'=>$link===''?null:$link,'enabled'=>$enabled,'starts_at'=>$starts,'ends_at'=>$ends];
-        if($id){$args['id']=$id;$stmt=$db->prepare('UPDATE platform_notifications SET category=:category,audience=:audience,user_id=:user_id,title=:title,message=:message,link_path=:link_path,enabled=:enabled,starts_at=:starts_at,ends_at=:ends_at WHERE id=:id');$stmt->execute($args);if(!$stmt->rowCount()){$check=$db->prepare('SELECT id FROM platform_notifications WHERE id=?');$check->execute([$id]);if(!$check->fetchColumn())throw new DomainException('Notificação não encontrada.');}}
-        else{$stmt=$db->prepare('INSERT INTO platform_notifications(category,audience,user_id,title,message,link_path,enabled,starts_at,ends_at) VALUES(:category,:audience,:user_id,:title,:message,:link_path,:enabled,:starts_at,:ends_at)');$stmt->execute($args);$id=(int)$db->lastInsertId();}
+        $args=['category'=>$category,'priority'=>$priority,'audience'=>$audience,'user_id'=>$userId,'title'=>$title,'message'=>$message,'link_path'=>$link===''?null:$link,'enabled'=>$enabled,'starts_at'=>$starts,'ends_at'=>$ends];
+        if($id){$args['id']=$id;$stmt=$db->prepare('UPDATE platform_notifications SET category=:category,priority=:priority,audience=:audience,user_id=:user_id,title=:title,message=:message,link_path=:link_path,enabled=:enabled,starts_at=:starts_at,ends_at=:ends_at WHERE id=:id');$stmt->execute($args);if(!$stmt->rowCount()){$check=$db->prepare('SELECT id FROM platform_notifications WHERE id=?');$check->execute([$id]);if(!$check->fetchColumn())throw new DomainException('Notificação não encontrada.');}}
+        else{$stmt=$db->prepare('INSERT INTO platform_notifications(category,priority,audience,user_id,title,message,link_path,enabled,starts_at,ends_at) VALUES(:category,:priority,:audience,:user_id,:title,:message,:link_path,:enabled,:starts_at,:ends_at)');$stmt->execute($args);$id=(int)$db->lastInsertId();}
         $stmt=$db->prepare('SELECT * FROM platform_notifications WHERE id=?');$stmt->execute([$id]);return $stmt->fetch()?:[];
     }
 

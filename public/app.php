@@ -18,7 +18,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24-2">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24-5">
 </head>
 <body>
 <div class="mobile-stage">
@@ -67,7 +67,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   </header>
   <aside id="notification-panel" class="notification-panel hidden" aria-label="Central de notificações">
     <div class="notification-head"><div><strong>Notificações</strong><small>Mensagens da plataforma e do suporte</small></div><button type="button" id="notification-close" aria-label="Fechar">×</button></div>
-    <div class="notification-filters" role="tablist" aria-label="Categorias de notificações"><button type="button" class="active" data-notification-filter="all">Todas</button><button type="button" data-notification-filter="announcement">Anúncios</button><button type="button" data-notification-filter="system">Sistema</button><button type="button" data-notification-filter="user">Usuário</button><button type="button" data-notification-filter="support">Suporte</button></div>
+    <div class="notification-filters" role="tablist" aria-label="Categorias de notificações"><button type="button" class="active" data-notification-filter="all">Todas</button><button type="button" data-notification-filter="announcement">Anúncios</button><button type="button" data-notification-filter="financial">Financeiro</button><button type="button" data-notification-filter="promotion">Promoções</button><button type="button" data-notification-filter="security">Segurança</button><button type="button" data-notification-filter="support">Suporte</button><button type="button" data-notification-filter="system">Sistema</button><button type="button" data-notification-filter="user">Usuário</button></div>
     <div id="notification-list" class="notification-list"><p>Nenhuma notificação.</p></div>
     <button type="button" class="notification-read-all" id="notification-read-all">Marcar todas como lidas</button>
   </aside>
@@ -221,8 +221,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-2"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-2" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-5"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-5" defer></script>
 <script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24-1" defer></script>
 </body>
 </html>

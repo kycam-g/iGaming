@@ -1507,3 +1507,17 @@ Execute após atualizar:
 - Badge dinâmico mostra a quantidade na Central de Recompensas e sinaliza disponibilidade nos módulos.
 - Ícones foram posicionados mais acima da barra inferior e empilham verticalmente quando houver vários.
 - Sem migration nova: a configuração usa `platform_settings`.
+
+## V24.5 — Central de Notificações avançada
+
+### Novidades
+- sino permanece exclusivo para notificações da plataforma;
+- novas categorias: Anúncios, Financeiro, Promoções, Segurança, Suporte, Sistema e Usuário;
+- prioridade configurável: Normal, Alta e Urgente;
+- mensagens de alta prioridade e urgentes ganham destaque visual no painel do jogador;
+- filtros horizontais por categoria no sino;
+- Admin atualizado para criar, editar, agendar e direcionar notificações por jogador ou para todos;
+- tabela administrativa agora exibe categoria, prioridade, público, status e período.
+
+### Banco de dados
+Executar `php bin/migrate.php` para aplicar a migration `035_notification_priority_categories.sql`.
