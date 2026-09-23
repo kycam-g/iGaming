@@ -18,7 +18,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260922-v23-completa">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24">
 </head>
 <body>
 <div class="mobile-stage">
@@ -42,7 +42,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <h2 class="mz-drawer-heading mz-drawer-separator">Sua conta</h2>
       <div class="mz-drawer-links">
         <button type="button" data-drawer-section="profile">☻ &nbsp; Meu perfil</button>
-        <button type="button" data-drawer-section="invite">♧ &nbsp; Convidar amigos</button>
+        <button type="button" data-drawer-promo="agency">♧ &nbsp; Convidar amigos</button>
         <button type="button" data-drawer-deposit="1">▣ &nbsp; Depósito</button>
         <button type="button" data-drawer-section="profile">↗ &nbsp; Saque / carteira</button>
       </div>
@@ -60,10 +60,16 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <button class="balance-pill" data-open-auth="register">Criar conta</button>
     </div>
     <div id="user-actions" class="header-actions hidden">
+      <button class="reward-bell" id="reward-notification-toggle" type="button" aria-label="Recompensas disponíveis" aria-expanded="false"><span aria-hidden="true">🔔</span><b id="reward-notification-badge" class="reward-count hidden">0</b></button>
       <button class="balance-pill" data-section="profile"><span id="header-balance">R$ 0,00</span></button>
       <button class="profile-mini" id="user-avatar" type="button" aria-label="Abrir meu perfil" title="Meu perfil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></button>
     </div>
   </header>
+  <aside id="reward-notification-panel" class="reward-notification-panel hidden" aria-label="Notificações de recompensas">
+    <div class="reward-notification-head"><div><strong>Recompensas</strong><small>Benefícios disponíveis na sua conta</small></div><button type="button" id="reward-notification-close" aria-label="Fechar">×</button></div>
+    <div id="reward-notification-list" class="reward-notification-list"><p>Nenhuma recompensa disponível.</p></div>
+    <button type="button" class="reward-notification-all" id="reward-notification-all">Ver Central de Recompensas</button>
+  </aside>
 
   <main class="content" id="content">
     <section class="page-section active" id="section-home">
@@ -139,8 +145,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
         <small>Saldo disponível</small><strong id="wallet-total">R$ 0,00</strong>
         <div class="wallet-actions"><button class="gold-btn" id="deposit-placeholder" type="button">DEPOSITAR</button><button class="dark-btn" id="withdraw-placeholder" type="button">SACAR</button></div>
       </section>
-      <section class="wallet-card profile-wallet-card"><h3>Carteira</h3><div id="wallet-accounts" class="account-list"><div class="empty-state">Entre para consultar a carteira.</div></div></section>
-      <section class="wallet-card profile-wallet-card"><div class="wallet-card-head"><h3>Movimentações</h3><button id="refresh-wallet" type="button">Atualizar</button></div><div id="transaction-list" class="transaction-list"><div class="empty-state">Nenhuma movimentação.</div></div></section>
+      <section class="wallet-card profile-wallet-card"><h3>Carteira</h3><div id="wallet-overview" class="wallet-overview"></div><div id="wallet-accounts" class="account-list"><div class="empty-state">Entre para consultar a carteira.</div></div></section>
+      <section class="wallet-card profile-wallet-card"><div class="wallet-card-head"><h3>Movimentações</h3><button id="refresh-wallet" type="button">Atualizar</button></div><div class="wallet-filter-row"><label>Filtrar<select id="transaction-filter"><option value="ALL">Todas</option><option value="DEPOSIT">Depósitos</option><option value="WITHDRAWAL">Saques</option><option value="PROMOTION">Promoções / bônus</option><option value="CASINO">Cassino</option><option value="AFFILIATE">Afiliado</option></select></label></div><div id="transaction-list" class="transaction-list"><div class="empty-state">Nenhuma movimentação.</div></div></section>
       <div class="profile-actions"><button type="button" class="dark-btn" id="profile-logout">Sair da conta</button></div>
     </section>
 
@@ -168,9 +174,9 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 
   <nav class="bottom-nav" aria-label="Navegação principal">
     <button class="bottom-item active" data-section="home"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></i><span id="home-nav-label">Início</span></button>
-    <button class="bottom-item" data-section="promotions"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l-1 6h3l-6 10 1-7H6l1-9Z"/></svg></i><span>Promoção</span></button>
+    <button class="bottom-item" data-section="promotions"><b id="promotions-nav-badge" class="bottom-reward-badge hidden">0</b><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l-1 6h3l-6 10 1-7H6l1-9Z"/></svg></i><span>Promoção</span></button>
     <button class="bottom-item center" id="deposit-nav" type="button"><i aria-hidden="true" class="bottom-center-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a3 3 0 0 1 3-3h11l4 4v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z"/><path d="M3 9h18"/><path d="M15 14h3"/></svg></i><span>Depósito</span></button>
-    <button class="bottom-item" data-section="invite"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8h4"/><path d="M19 6v4"/></svg></i><span>Convidar</span></button>
+    <button class="bottom-item" id="invite-agency-nav" type="button"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8h4"/><path d="M19 6v4"/></svg></i><span>Convidar</span></button>
     <button class="bottom-item" id="profile-nav"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></i><span>Perfil</span></button>
   </nav>
 </div>
@@ -211,8 +217,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260922-v23-completa"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260922-v23-completa" defer></script>
-<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260922-v23-completa" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24" defer></script>
+<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24" defer></script>
 </body>
 </html>

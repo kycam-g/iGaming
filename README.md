@@ -1403,3 +1403,39 @@ Depois configure em **Admin → Promoções → Roleta de Saque** e ative a camp
 - Não há migration adicional. Fonte: tabelas existentes `wallet_accounts`, `ledger_entries`, `financial_transactions`, `promotion_redemptions`, `promotion_wager_allocations` e `promotion_configurations`.
 - Teste de estrutura: `php tests/Unit/PromotionOversightStructureTest.php`. Arquivos JS e PHP sujeitos a lint. Detalhes e roteiro completo em `docs/V23_REFINAMENTO_E_HOMOLOGACAO.md`.
 - **Não homologado para dinheiro real**: conciliação gateway/PlayFiver, testes simultâneos em MySQL e validação visual em navegador móvel real continuam obrigatórios.
+
+## V24 — Experiência do jogador, operação e diagnóstico
+
+### Navegação
+- o botão inferior **Convidar** agora abre diretamente **Promoções → Agência e Indicações**;
+- o atalho **Convidar amigos** do menu lateral também abre o módulo de Agência.
+
+### Notificações e recompensas
+- sino de recompensas no cabeçalho para usuários logados;
+- badge numérico na aba **Promoção** do menu inferior;
+- contador atualizado a partir da disponibilidade real dos módulos do jogador;
+- painel rápido lista apenas benefícios/giros/resgates realmente disponíveis;
+- atalhos do painel abrem diretamente o módulo correspondente.
+
+### Perfil e carteira
+- visão separada de saldo disponível, bônus e saldo de afiliado;
+- filtros no histórico por depósitos, saques, promoções/bônus, cassino e afiliado;
+- identificação mais clara da origem das movimentações.
+
+### Administração de promoções
+- dashboard ampliado com jogadores com resgates, atividade em 30 dias e valor nominal registrado;
+- controles rápidos para ativar/desativar configurações sem editar seus valores;
+- todas as alterações rápidas geram registro no audit log;
+- ferramenta **Diagnóstico por jogador** por ID público ou UUID, exibindo disponibilidade e motivo por módulo.
+
+### Auditoria financeira
+Foram adicionadas consultas somente leitura para:
+- saldos negativos de carteira;
+- transações financeiras concluídas sem lançamento correspondente no ledger;
+- divergência entre valor de resgate promocional e valor lançado no ledger;
+- além das verificações já existentes de carteira x ledger, rollover, alocação de apostas e duplicidades.
+
+### Segurança
+- nenhuma rotina de diagnóstico corrige ou movimenta valores automaticamente;
+- a elegibilidade final continua sendo validada no servidor no momento de cada resgate;
+- não há migration nova nesta versão.

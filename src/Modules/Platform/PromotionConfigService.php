@@ -205,6 +205,17 @@ final class PromotionConfigService
         }
         return ['id'=>$savedId];
     }
+    public function toggleEnabled(string $type,int $id,bool $enabled): array {
+        $this->fields($type);if($id<1)throw new DomainException('Registro inválido.');
+        $db=$this->db();$stmt=$db->prepare('SELECT id,enabled FROM promotion_configurations WHERE id=? AND type=?');$stmt->execute([$id,$type]);$row=$stmt->fetch();if(!$row)throw new DomainException('Campanha não encontrada.');
+        $db->prepare('UPDATE promotion_configurations SET enabled=? WHERE id=? AND type=?')->execute([(int)$enabled,$id,$type]);
+        if($type==='roulette'){
+            if($enabled)$db->prepare('INSERT INTO roulette_campaign_state(campaign_id,activated_at) VALUES(?,NOW(6)) ON DUPLICATE KEY UPDATE activated_at=activated_at')->execute([$id]);
+            else $db->prepare('DELETE FROM roulette_campaign_state WHERE campaign_id=?')->execute([$id]);
+        }
+        return ['id'=>$id,'type'=>$type,'enabled'=>$enabled];
+    }
+
     public function delete(string $type,int $id): void {
         $this->fields($type);
         if($id<1)throw new DomainException('Registro inválido.');

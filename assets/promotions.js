@@ -748,6 +748,13 @@
     }
     rewardsCenter.append(events);
   }
+  function updateRewardNotificationSurfaces(){
+    const available=token()?orderedModules().filter(mod=>availabilityState(mod).available):[];
+    const count=available.length;
+    for(const id of ['promotions-nav-badge','reward-notification-badge']){const badge=document.getElementById(id);if(!badge)continue;badge.textContent=String(count);badge.classList.toggle('hidden',count===0);}
+    const list=document.getElementById('reward-notification-list');if(list){list.replaceChildren();if(!token())list.append(node('p','','Entre na sua conta para consultar recompensas.'));else if(!count)list.append(node('p','','Nenhuma recompensa disponível agora.'));else for(const mod of available){const state=availabilityState(mod);const button=node('button','reward-notification-item');button.type='button';button.dataset.promo=mod.id;button.append(node('span','',mod.icon),node('span','',mod.title),node('small','',state.detail));list.append(button);}}
+    document.dispatchEvent(new CustomEvent('mz:rewards-summary',{detail:{count,modules:available.map(mod=>({id:mod.id,title:mod.title,detail:availabilityState(mod).detail}))}}));
+  }
   function renderPromotionDirectory(){
     directory.replaceChildren();
     for(const mod of orderedModules()){
@@ -770,7 +777,7 @@
     const result=await loadAvailabilityStates();
     if(version!==availabilityRefreshVersion)return;
     availabilityByModule=result.states;rewardSnapshots=result.snapshots;
-    renderPromotionDirectory();renderRewardsCenter();
+    renderPromotionDirectory();renderRewardsCenter();updateRewardNotificationSurfaces();
   }
   function refreshAvailability(){refresh().catch(error=>{console.error('Falha ao atualizar disponibilidade das promoções:',error);});}
   function showIndex(){detail.classList.add('hidden');detail.replaceChildren();directory.classList.remove('hidden');section?.classList.remove('promo-detail-mode');refreshAvailability();}
@@ -800,9 +807,10 @@
   document.addEventListener('mz:open-promotion',event=>{if(definitions.some(item=>item.id===event.detail?.id))openModule(event.detail.id);});
   directory.addEventListener('click',event=>{const button=event.target.closest('button[data-promo]');if(button)openModule(button.dataset.promo);});
   rewardsCenter?.addEventListener('click',event=>{const button=event.target.closest('button[data-promo]');if(button)openModule(button.dataset.promo);});
+  document.getElementById('reward-notification-list')?.addEventListener('click',event=>{const button=event.target.closest('button[data-promo]');if(!button)return;document.getElementById('reward-notification-panel')?.classList.add('hidden');document.querySelectorAll('.page-section').forEach(x=>x.classList.toggle('active',x.id==='section-promotions'));document.querySelectorAll('.bottom-item[data-section]').forEach(x=>x.classList.toggle('active',x.dataset.section==='promotions'));openModule(button.dataset.promo);});
   document.querySelectorAll('[data-section="promotions"]').forEach(button=>button.addEventListener('click',showIndex));
   document.addEventListener('mz:auth-ready',()=>{refreshAvailability();setTimeout(maybeOpenEnvelope,180);});
-  document.addEventListener('mz:auth-changed',()=>{availabilityRefreshVersion++;availabilityByModule={};rewardSnapshots={};renderRewardsCenter();renderPromotionDirectory();refreshAvailability();});
+  document.addEventListener('mz:auth-changed',()=>{availabilityRefreshVersion++;availabilityByModule={};rewardSnapshots={};renderRewardsCenter();renderPromotionDirectory();updateRewardNotificationSurfaces();refreshAvailability();});
   document.addEventListener('mz:section-changed',event=>{if(event.detail?.name==='promotions')refreshAvailability();});
   document.addEventListener('mz:wallet-updated',()=>{refreshAvailability();setTimeout(maybeOpenEnvelope,250);});
   document.addEventListener('mz:promotion-updated',refreshAvailability);
