@@ -1,0 +1,3 @@
+INSERT INTO payment_gateways (code,name,enabled,deposit_enabled,withdrawal_enabled,mode,sort_order,priority_deposit,priority_withdrawal,min_deposit_minor,max_deposit_minor,min_withdrawal_minor,max_withdrawal_minor,credentials_encrypted,settings,public_config)
+VALUES ('abilitypay','AbilityPay',0,1,0,'PRODUCTION',20,20,20,100,NULL,100,NULL,NULL,JSON_OBJECT('base_url','https://abilitypay.app/api','deposit_description','Depósito PIX','withdrawal_description','Saque da plataforma'),JSON_OBJECT('method','PIX'))
+ON DUPLICATE KEY UPDATE name=VALUES(name), settings=COALESCE(payment_gateways.settings,VALUES(settings)), public_config=VALUES(public_config);

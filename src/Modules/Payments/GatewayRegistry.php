@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Payments;
 
 use App\Integrations\Payments\Contracts\PaymentGateway;
+use App\Integrations\Payments\AbilityPay\AbilityPayGateway;
 use App\Integrations\Payments\Pixup\PixupGateway;
 use App\Integrations\Payments\Sandbox\SandboxPixGateway;
 use DomainException;
@@ -15,6 +16,7 @@ final class GatewayRegistry
     {
         return match ((string) ($config['code'] ?? '')) {
             'sandbox_pix' => new SandboxPixGateway(),
+            'abilitypay' => new AbilityPayGateway($config),
             'pixup' => new PixupGateway($config),
             default => throw new DomainException('Adapter do gateway não está instalado.'),
         };

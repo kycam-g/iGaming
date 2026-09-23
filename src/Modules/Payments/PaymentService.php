@@ -7,6 +7,7 @@ namespace App\Modules\Payments;
 use App\Core\Database\Database;
 use App\Core\Support\Env;
 use App\Integrations\Payments\Pixup\PixupGateway;
+use App\Integrations\Payments\AbilityPay\AbilityPayGateway;
 use App\Modules\Wallet\WalletService;
 use DomainException;
 use PDO;
@@ -130,6 +131,7 @@ final class PaymentService
         $config=$this->configs->configForRuntime($gatewayCode);
         if(empty($config['enabled'])) throw new DomainException('Gateway desabilitado.');
         $gateway=$this->gateways->resolve($config);
+        if($gateway instanceof AbilityPayGateway) return $this->processAbilityPayWebhook($gatewayCode,$gateway,$rawBody,$headers,$payload);
         if($gateway instanceof PixupGateway) $gateway->validateWebhook($rawBody,$headers);
 
         $data=is_array($payload['data']??null)?$payload['data']:$payload;
@@ -166,7 +168,82 @@ final class PaymentService
         return ['received'=>true,'matched'=>true,'payment_id'=>$payment['id']];
     }
 
-    public function getForUser(string $userId,string $paymentId): array { return $this->formatPayment($this->getRawForUser($userId,$paymentId),false); }
+    private function processAbilityPayWebhook(string $gatewayCode, AbilityPayGateway $gateway, string $rawBody, array $headers, array $payload): array
+    {
+        $data=is_array($payload['data']??null)?$payload['data']:$payload;
+        $event=strtolower(trim((string)($payload['event']??'unknown')));
+        $remoteId=trim((string)($data['external_id']??''));
+        if($remoteId==='') throw new DomainException('Webhook AbilityPay sem external_id.');
+        $eventKey=(string)($this->header($headers,'X-Webhook-Id')??'');
+        if($eventKey==='') $eventKey=hash('sha256',$gatewayCode.'|'.$event.'|'.$remoteId.'|'.$rawBody);
+
+        $payment=$this->findWebhookPayment($gatewayCode,'',$remoteId);
+        $processed=false;
+        try {
+            $stmt=Database::connection()->prepare('INSERT INTO payment_webhook_events (gateway_code,event_key,external_id,event_type,payload) VALUES (:gateway,:event_key,:external_id,:event_type,:payload)');
+            $stmt->execute(['gateway'=>$gatewayCode,'event_key'=>$eventKey,'external_id'=>$remoteId,'event_type'=>$event,'payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
+        } catch (PDOException $e) {
+            if((string)$e->getCode()!=='23000') throw $e;
+            $q=Database::connection()->prepare('SELECT processed_at FROM payment_webhook_events WHERE gateway_code=:g AND event_key=:k LIMIT 1');
+            $q->execute(['g'=>$gatewayCode,'k'=>$eventKey]);
+            $processed=(bool)$q->fetchColumn();
+            if($processed) return ['received'=>true,'duplicate'=>true];
+        }
+        if(!$payment){$this->markWebhookProcessed($gatewayCode,$eventKey);return ['received'=>true,'matched'=>false];}
+
+        if(in_array($event,['charge.approved','payout.approved','payout.failed'],true)){
+            $remote=$gateway->getTransaction($remoteId);
+            $remoteStatus=strtolower((string)($remote['status']??''));
+            if($event==='charge.approved'){
+                if($remoteStatus!=='approved') throw new DomainException('AbilityPay ainda não confirmou este depósito.');
+                if((string)$payment['kind']!=='DEPOSIT') throw new DomainException('Evento de depósito associado a transação incompatível.');
+                $this->creditDepositOnce($payment);
+            } elseif($event==='payout.approved'){
+                if($remoteStatus!=='approved') throw new DomainException('AbilityPay ainda não confirmou este saque.');
+                $this->settleAbilityPayWithdrawal($payment,'PAID',$event,$remote);
+            } else {
+                if(!in_array($remoteStatus,['failed','cancelled','canceled','rejected'],true)) throw new DomainException('AbilityPay ainda não confirmou a falha deste saque.');
+                $this->settleAbilityPayWithdrawal($payment,'FAILED',$event,$remote);
+            }
+        } elseif($event==='charge.pending') {
+            if((string)$payment['kind']==='DEPOSIT') Database::connection()->prepare("UPDATE payment_transactions SET status='PENDING' WHERE id=:id AND status='PENDING'")->execute(['id'=>$payment['id']]);
+        }
+        $this->markWebhookProcessed($gatewayCode,$eventKey);
+        return ['received'=>true,'matched'=>true,'payment_id'=>$payment['id']];
+    }
+
+    private function settleAbilityPayWithdrawal(array $payment,string $status,string $event,array $remote): void
+    {
+        if((string)$payment['kind']!=='WITHDRAWAL') throw new DomainException('Evento de saque associado a transação incompatível.');
+        Database::transaction(function(PDO $pdo) use($payment,$status,$event,$remote): void {
+            $stmt=$pdo->prepare("SELECT * FROM payment_transactions WHERE id=:id AND kind='WITHDRAWAL' FOR UPDATE");
+            $stmt->execute(['id'=>$payment['id']]);$row=$stmt->fetch();if(!$row)throw new DomainException('Saque não encontrado.');
+            if(in_array((string)$row['status'],['PAID','FAILED','CANCELLED'],true)) return;
+            if($status==='FAILED'){
+                $this->wallet->credit((string)$row['user_id'],'CASH',(int)$row['amount_minor'],'PAYMENT_WITHDRAWAL',(string)$row['id'],'withdrawal-gateway-refund:'.(string)$row['id'],'WITHDRAWAL_GATEWAY_REFUND',$pdo);
+            }
+            $meta=json_decode((string)($row['metadata']??'{}'),true)?:[];
+            $meta['gateway_confirmation']=['event'=>$event,'remote_status'=>$remote['status']??null,'at'=>gmdate('c')];
+            $pdo->prepare('UPDATE payment_transactions SET status=:status,metadata=:metadata,updated_at=NOW() WHERE id=:id')->execute(['status'=>$status,'metadata'=>json_encode($meta,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'id'=>$row['id']]);
+        });
+    }
+
+    public function getForUser(string $userId,string $paymentId): array
+    {
+        $row=$this->getRawForUser($userId,$paymentId);
+        if((string)$row['gateway_code']==='abilitypay' && (string)$row['kind']==='DEPOSIT' && in_array((string)$row['status'],['PENDING','PROCESSING'],true) && !empty($row['external_id'])){
+            try{
+                $config=$this->configs->configForRuntime('abilitypay');
+                $gateway=$this->gateways->resolve($config);
+                $remote=$gateway->getTransaction((string)$row['external_id']);
+                $remoteStatus=strtolower((string)($remote['status']??''));
+                if($remoteStatus==='approved') $this->creditDepositOnce($row);
+                elseif(in_array($remoteStatus,['failed','cancelled','canceled','rejected'],true)) Database::connection()->prepare("UPDATE payment_transactions SET status='FAILED' WHERE id=:id AND status IN ('PENDING','PROCESSING')")->execute(['id'=>$row['id']]);
+                $row=$this->getRawForUser($userId,$paymentId);
+            }catch(\Throwable){/* webhook permanece como mecanismo principal; polling é fallback */}
+        }
+        return $this->formatPayment($row,false);
+    }
 
     private function creditDepositOnce(array $payment): void
     {

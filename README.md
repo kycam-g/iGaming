@@ -1577,3 +1577,23 @@ php bin/migrate.php
 ```
 
 A migration `037_support_tickets.sql` cria as tabelas de tickets e mensagens.
+
+## V24.8 — Gateway AbilityPay
+
+- Novo gateway `abilitypay` para depósitos PIX e saques PIX.
+- Credenciais configuráveis em **Admin → Gateways**: `client_id`, `client_secret` e URL base.
+- Depósito usa `POST /api/integrations/pix/charges`, salvando `external_id` e exibindo o `pix_code`.
+- Validação defensiva do BR Code e rejeição de resposta `provider=LOCAL`.
+- Polling de `GET /api/integrations/transactions/{external_id}` como fallback quando o webhook demora.
+- Callback público: `POST /api/abilitypay/callback` (também aceito em `/api/webhooks/payments/abilitypay`).
+- Eventos suportados: `charge.pending`, `charge.approved`, `payout.approved` e `payout.failed`.
+- Antes de creditar depósito ou finalizar/estornar saque a plataforma confirma o estado diretamente na API AbilityPay.
+- Saques usam `POST /api/integrations/withdrawals` com `Idempotency-Key` determinística por saque.
+- Migration nova: `database/migrations/038_abilitypay_gateway.sql`.
+
+### Configuração AbilityPay
+
+1. Rode `php bin/migrate.php`.
+2. Em **Admin → Gateways → AbilityPay**, informe Client ID e Client Secret e ative depósito e/ou saque.
+3. No painel AbilityPay, configure a Callback HTTPS como `https://SEU_DOMINIO/api/abilitypay/callback`.
+4. Faça homologação de depósito e saque antes de ativar em produção.

@@ -180,13 +180,22 @@ final class WithdrawalService
                 'postback_url'=>$postback,
             ]);
             $remoteStatus=strtoupper((string)($result['status'] ?? 'PROCESSING'));
-            $status=in_array($remoteStatus,['PAID','PROCESSING','PENDING'],true) ? ($remoteStatus==='PENDING'?'PROCESSING':$remoteStatus) : 'PROCESSING';
+            $status=match($remoteStatus){
+                'PAID','APPROVED','CONFIRMED','COMPLETED','SUCCESS','SUCCEEDED'=>'PAID',
+                'FAILED','CANCELLED','CANCELED','REJECTED'=>'FAILED',
+                default=>'PROCESSING',
+            };
             $metadata['gateway']=array_merge((array)($metadata['gateway'] ?? []),(array)($result['metadata'] ?? []));
-            $up=$pdo->prepare('UPDATE payment_transactions SET status=:status,external_id=:external_id,metadata=:metadata,updated_at=NOW() WHERE id=:id');
-            $up->execute([
-                'status'=>$status,'external_id'=>($result['external_id']??null) ?: null,
-                'metadata'=>json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'id'=>$paymentId,
-            ]);
+            if($status==='FAILED'){
+                Database::transaction(function(PDO $tx) use($paymentId,$result,$metadata): void {
+                    $lock=$tx->prepare("SELECT * FROM payment_transactions WHERE id=:id AND kind='WITHDRAWAL' FOR UPDATE");$lock->execute(['id'=>$paymentId]);$row=$lock->fetch();if(!$row)return;
+                    if(!in_array((string)$row['status'],['FAILED','CANCELLED','PAID'],true)) $this->wallet->credit((string)$row['user_id'],'CASH',(int)$row['amount_minor'],'PAYMENT_WITHDRAWAL',$paymentId,'withdrawal-gateway-refund:'.$paymentId,'WITHDRAWAL_GATEWAY_REFUND',$tx);
+                    $tx->prepare("UPDATE payment_transactions SET status='FAILED',external_id=:external_id,metadata=:metadata,updated_at=NOW() WHERE id=:id")->execute(['external_id'=>($result['external_id']??null) ?: null,'metadata'=>json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'id'=>$paymentId]);
+                });
+            }else{
+                $up=$pdo->prepare('UPDATE payment_transactions SET status=:status,external_id=:external_id,metadata=:metadata,updated_at=NOW() WHERE id=:id');
+                $up->execute(['status'=>$status,'external_id'=>($result['external_id']??null) ?: null,'metadata'=>json_encode($metadata,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'id'=>$paymentId]);
+            }
         } catch(Throwable $e) {
             $metadata=json_decode((string)$payment['metadata'],true) ?: [];
             $metadata['gateway_error']=['message'=>$e->getMessage(),'at'=>gmdate('c')];
@@ -255,7 +264,7 @@ final class WithdrawalService
 
         $remoteStatus = strtoupper(trim((string)($remote['status'] ?? 'PROCESSING')));
         $normalized = match ($remoteStatus) {
-            'PAID', 'CONFIRMED', 'COMPLETED', 'SUCCESS', 'SUCCEEDED' => 'PAID',
+            'PAID', 'APPROVED', 'CONFIRMED', 'COMPLETED', 'SUCCESS', 'SUCCEEDED' => 'PAID',
             'FAILED', 'CANCELLED', 'CANCELED', 'REJECTED' => 'FAILED',
             default => 'PROCESSING',
         };
@@ -314,7 +323,7 @@ final class WithdrawalService
         $olderThanMinutes=max(1,min(1440,$olderThanMinutes));
         $limit=max(1,min(200,$limit));
         $pdo=Database::connection();
-        $stmt=$pdo->query("SELECT id FROM payment_transactions WHERE kind='WITHDRAWAL' AND status='PROCESSING' AND gateway_code='pixup' AND updated_at <= DATE_SUB(NOW(), INTERVAL {$olderThanMinutes} MINUTE) ORDER BY updated_at ASC LIMIT {$limit}");
+        $stmt=$pdo->query("SELECT id FROM payment_transactions WHERE kind='WITHDRAWAL' AND status='PROCESSING' AND gateway_code IN ('pixup','abilitypay') AND updated_at <= DATE_SUB(NOW(), INTERVAL {$olderThanMinutes} MINUTE) ORDER BY updated_at ASC LIMIT {$limit}");
         $ids=array_map(static fn(array $r): string => (string)$r['id'],$stmt->fetchAll());
         $results=[];
         foreach($ids as $id){

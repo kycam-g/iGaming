@@ -231,6 +231,9 @@ $router->get('/api/payments/status', function (Request $request) use ($auth,$pay
 $router->post('/api/payments/deposits', function (Request $request) use ($auth,$payments) { $user=$auth->authenticate($request->bearerToken()); if(!$user)Response::json(['error'=>'unauthorized'],401); return ['payment'=>$payments->createDeposit($user['id'],isset($request->body['gateway_code'])?(string)$request->body['gateway_code']:null,(int)($request->body['amount_minor']??0),(string)($request->body['idempotency_key']??''))]; });
 $router->post('/api/payments/sandbox/confirm', function (Request $request) use ($auth,$payments) { $user=$auth->authenticate($request->bearerToken()); if(!$user)Response::json(['error'=>'unauthorized'],401); return ['payment'=>$payments->confirmSandboxDeposit($user['id'],(string)($request->body['payment_id']??''))]; });
 $router->post('/api/webhooks/payments/pixup', fn(Request $request) => $payments->processWebhook('pixup',$request->rawBody,$request->headers,$request->body));
+$abilityPayCallback = fn(Request $request) => $payments->processWebhook('abilitypay',$request->rawBody,$request->headers,$request->body);
+$router->post('/api/webhooks/payments/abilitypay', $abilityPayCallback);
+$router->post('/api/abilitypay/callback', $abilityPayCallback);
 
 $router->post('/admin/api/login', fn(Request $request) => $adminAuth->login((string)($request->body['email']??''),(string)($request->body['password']??'')));
 $router->get('/admin/api/me', function (Request $request) use ($adminAuth) { $admin=$adminAuth->authenticate($request->bearerToken()); if(!$admin)Response::json(['error'=>'unauthorized'],401); return ['admin'=>$admin]; });
