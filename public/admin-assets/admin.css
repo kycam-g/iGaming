@@ -368,3 +368,17 @@ button:focus-visible,a:focus-visible{outline:2px solid #ff6569!important;outline
 .admin-brand-rest{color:#fff!important}
 .admin-brand-subtitle{display:block!important;margin:0!important;padding:0!important;font-size:9px!important;line-height:1!important;letter-spacing:2.4px!important;color:#b8b0a6!important;font-weight:850!important}
 .admin-brand.admin-brand-textonly img,.admin-brand.admin-brand-textonly>b{display:none!important}
+
+
+/* V23.3 / V23.4: governança visual das promoções */
+.mz-admin-promo-overview,.mz-admin-promo-audit{margin-bottom:18px;border-radius:18px!important;background:#1b1d21!important;border:1px solid #3b4149!important}
+.mz-admin-promo-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.mz-admin-promo-stats>div{display:grid;gap:8px;padding:18px;border:1px solid #41464e;border-radius:14px;background:#24282e}
+.mz-admin-promo-stats span{font-size:12px;color:#afb5be}.mz-admin-promo-stats strong{font-size:26px;color:#fff}
+.mz-admin-promo-details,.mz-admin-audit-check{margin-top:12px;border:1px solid #42474d;border-radius:14px;padding:12px 16px;background:#21262b;color:#f5f6f7}
+.mz-admin-promo-details summary,.mz-admin-audit-check summary{cursor:pointer;font-weight:800;padding:6px 0}
+.mz-admin-promo-details .table-wrap{margin-top:12px;overflow-x:auto}
+.mz-admin-promo-audit .hint,.mz-admin-promo-overview .hint{line-height:1.6}
+.mz-admin-audit-check pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#11161b;color:#d9e1e8;padding:12px;border:1px solid #363f47;border-radius:10px;font-size:12px}
+.mz-admin-audit-entries{max-height:380px;overflow:auto;margin-top:12px}
+@media(max-width:680px){.mz-admin-promo-stats{grid-template-columns:1fr}.mz-admin-promo-overview,.mz-admin-promo-audit{padding:14px!important}.mz-admin-promo-stats strong{font-size:23px}}

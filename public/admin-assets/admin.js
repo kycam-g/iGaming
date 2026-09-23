@@ -631,3 +631,32 @@ $('#banner-form-toggle').addEventListener('click',()=>{const filter=document.que
   }catch(err){const el=$id('promotion-config-modal-error');el.textContent=err.message;el.classList.remove('hidden')}finally{button.disabled=false}
  });
 })();
+
+
+// V23.3 + V23.4 — gestão e auditoria somente leitura, sem qualquer mutação financeira.
+(() => {
+ const el=id=>document.getElementById(id);
+ const add=(parent,tag,value,cls='')=>{const child=document.createElement(tag);if(cls)child.className=cls;child.textContent=String(value??'—');parent.append(child);return child;};
+ const moneyValue=v=>new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'}).format(Number(v||0)/100);
+ const fill=(id,columns,rows)=>{const body=el(id);body.replaceChildren();if(!rows.length){const tr=document.createElement('tr');const td=add(tr,'td','Nenhum registro.');td.colSpan=columns.length;body.append(tr);return;}for(const row of rows){const tr=document.createElement('tr');columns.forEach(col=>add(tr,'td',col(row)));body.append(tr);}};
+ async function overview(){const status=el('mz-oversight-message');status.textContent='Atualizando dados...';try{
+   const d=await api('/admin/api/promotions/overview');
+   const stats=el('mz-oversight-stats');stats.replaceChildren();
+   const campaignCount=(d.campaigns||[]).reduce((v,r)=>v+Number(r.total||0),0);
+   const enabledCount=(d.campaigns||[]).reduce((v,r)=>v+Number(r.enabled||0),0);
+   const claimedCount=(d.redemptions||[]).reduce((v,r)=>v+Number(r.total||0),0);
+   for(const [label,val] of [['Campanhas cadastradas',campaignCount],['Configurações habilitadas',enabledCount],['Resgates registrados',claimedCount]]){const card=document.createElement('div');add(card,'span',label);add(card,'strong',val);stats.append(card);}
+   fill('mz-oversight-campaigns',[r=>r.type,r=>r.total,r=>r.enabled],d.campaigns||[]);
+   fill('mz-oversight-redemptions',[r=>r.promotion_type,r=>r.status,r=>r.total,r=>moneyValue(r.amount_minor)],d.redemptions||[]);
+   fill('mz-oversight-recent',[r=>'#'+r.public_id,r=>r.title+' • '+r.promotion_type,r=>r.status,r=>moneyValue(r.amount_minor),r=>r.created_at],d.recent||[]);
+   status.textContent=d.note||'Dados atualizados.';
+ }catch(error){status.textContent='Falha ao consultar a central: '+error.message;}}
+ async function audit(){const status=el('mz-promo-audit-message'),root=el('mz-promo-audit-results');root.replaceChildren();status.textContent='Executando consultas locais de leitura...';try{
+   const d=await api('/admin/api/promotions/financial-audit');const names={wallet_ledger_mismatch:'Carteira x saldo líquido no ledger',invalid_ledger_transition:'Movimentação com cálculo inconsistente',redemption_missing_transaction:'Resgate sem transação concluída',invalid_rollover_progress:'Progresso de rollover inconsistente',duplicate_redemption_transactions:'Transação vinculada a mais de um resgate',overallocated_bet:'Aposta alocada acima do valor real',rollover_allocation_mismatch:'Rollover divergente das apostas alocadas',duplicate_promotion_credit_reference:'Crédito de promoção repetido por referência'};
+   for(const [key,info] of Object.entries(d.summary||{})){const details=document.createElement('details');details.className='mz-admin-audit-check';const sum=document.createElement('summary');sum.textContent=(names[key]||key)+' — '+info.sample_count+(info.truncated?' (amostra limitada)':' registro(s) na amostra');details.append(sum);const rows=d.checks?.[key]||[];if(!rows.length)add(details,'p','Nenhuma divergência encontrada nesta consulta.');else{const table=document.createElement('div');table.className='mz-admin-audit-entries';for(const row of rows){const pre=document.createElement('pre');pre.textContent=JSON.stringify(row,null,2);table.append(pre);}details.append(table);}root.append(details);}
+   status.textContent=d.note||'Diagnóstico finalizado.';
+ }catch(error){status.textContent='Falha no diagnóstico: '+error.message;}}
+ el('mz-oversight-refresh')?.addEventListener('click',overview);el('mz-promo-audit-refresh')?.addEventListener('click',audit);
+ // Atualiza o resumo ao entrar em Promoções, sem executar automaticamente as consultas pesadas de auditoria.
+ document.querySelectorAll('[data-page="promotions"],[data-admin-promotion-tab]').forEach(b=>b.addEventListener('click',()=>{if(!el('page-promotions').classList.contains('hidden'))overview();}));
+})();

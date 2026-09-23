@@ -21,7 +21,7 @@ verify(method_exists(WelcomeRouletteService::class,'status') && method_exists(We
 verify(method_exists(PromotionRedemptionService::class,'creditRoulette'), 'Integração com carteira ausente.');
 verify(str_contains($schema, 'UNIQUE KEY uq_roulette_credit_source'), 'Chave única de origem ausente.');
 verify(str_contains($schema, 'UNIQUE KEY uq_roulette_spin_redemption'), 'Chave única do resultado ausente.');
-verify(str_contains($service, 'random_int') === false, 'Valor duplicado do sorteio fora do fluxo financeiro compartilhado.');
+verify(str_contains($service, 'creditRoulette($db,$userId,$campaign,$awardCfg)') && str_contains($service, '\'forced_reward_cents\''), 'O prêmio sorteado deve percorrer o fluxo financeiro compartilhado.');
 verify(str_contains($service, "pt.status='PAID'") && str_contains($service, 'pt.created_at>=?'), 'Fonte de depósito incorreta.');
 verify(str_contains($service, 'pr.created_at>=?') && str_contains($service, 'used_spins=used_spins+1'), 'Origem da indicação ou consumo ausente.');
 verify(str_contains($routes, '/api/promotions/roulette/spin') && str_contains($routes, '/api/promotions/roulette/status'), 'Endpoints não publicados.');

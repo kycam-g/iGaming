@@ -898,3 +898,25 @@ body::before{content:"";position:fixed;inset:0;pointer-events:none;z-index:0;bac
 .mz-center-history-line{display:flex;justify-content:space-between;gap:12px;border-top:1px solid #343a42;padding:12px 0}.mz-center-history-line>div{display:grid;gap:5px}.mz-center-history-line>div:last-child{text-align:right}.mz-center-history-line strong{color:#fff;font-size:12px}.mz-center-history-line small{color:#aeb7c2;font-size:11px}
 @media(max-width:690px){.mz-center-list{grid-template-columns:1fr}.mz-center-item-action{white-space:normal;text-align:right}.mz-center-hero{padding:17px}.mz-center-metric{padding:11px 8px}.mz-center-metric strong{font-size:22px}.mz-center-metric span{font-size:10px}}
 @media(max-width:370px){.mz-center-metrics{gap:5px}.mz-center-metric{padding:9px 6px}.mz-center-other{flex-direction:column;align-items:flex-start}.mz-center-other small{text-align:left}}
+
+
+/* V23.2: identidade premium compartilhada, responsiva e acessível. */
+#section-promotions{--promo-radius:18px;--promo-border:#434a54;--promo-paper:#20252b;--promo-ink:#f5f6f8}
+#section-promotions .mz-promo-detail{max-width:1120px;margin-inline:auto;min-width:0}
+#section-promotions .mz-promo-detail :is(.mz-promo-box,.mz-vip,.mz-rebate,.mz-rescue,.mz-lottery,.mz-cashwheel,.mz-chests,.mz-agency,.mz-coupon-shell){min-width:0;max-width:100%;box-sizing:border-box}
+#section-promotions .mz-promo-detail :is(button,input,select){font-family:inherit}
+#section-promotions .mz-promo-detail button{touch-action:manipulation;min-height:44px;transition:filter .18s ease,border-color .18s ease,background-color .18s ease}
+#section-promotions .mz-promo-detail button:not(:disabled):hover{filter:brightness(1.08)}
+#section-promotions .mz-promo-detail button:focus-visible,#section-promotions .mz-promo-tile:focus-visible{outline:2px solid #ffa36c;outline-offset:3px}
+#section-promotions .mz-promo-detail button:disabled{opacity:.52;cursor:not-allowed}
+#section-promotions .mz-promo-detail :is(.mz-promo-rules,.mz-promo-history){border-radius:var(--promo-radius);max-width:100%;box-sizing:border-box}
+#section-promotions .mz-promo-detail :is(.mz-roulette-stage,.mz-cashwheel-stage,.mz-lottery-stage){margin-inline:auto;max-width:100%;box-sizing:border-box}
+#section-promotions .mz-promo-detail :is(.mz-roulette-wheel,.mz-cashwheel-wheel,.mz-lottery-wheel){flex-shrink:0}
+#section-promotions .mz-promo-tile:not(.is-available){border-color:#83423e;background:linear-gradient(180deg,#292126,#1d1d22)}
+#section-promotions .mz-promo-tile.is-available{border-color:#348a58;background:linear-gradient(180deg,#1c3029,#192121)}
+#section-promotions .mz-promo-tile{min-height:174px;align-content:start;border-radius:18px;overflow:hidden}
+#section-promotions .mz-promo-tile-body strong{line-height:1.3;overflow-wrap:anywhere}
+#section-promotions .mz-promo-tile-body small{line-height:1.45;overflow-wrap:anywhere}
+@media(max-width:740px){#section-promotions .mz-promo-detail{width:100%}#section-promotions .mz-promo-tile{min-height:160px}}
+@media(max-width:420px){#section-promotions .mz-promo-detail{padding-inline:0}#section-promotions .mz-promo-tile{padding:13px;gap:9px}#section-promotions .mz-promo-detail :is(.mz-roulette-stage,.mz-cashwheel-stage,.mz-lottery-stage){max-width:calc(100vw - 42px)}}
+@media(prefers-reduced-motion:reduce){#section-promotions .mz-promo-tile,#section-promotions .mz-promo-detail button{transition:none!important}#section-promotions .mz-rewards-center *{scroll-behavior:auto!important}}

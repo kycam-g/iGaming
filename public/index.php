@@ -15,6 +15,7 @@ use App\Core\Support\Env;
 use App\Modules\Admin\AdminAuthService;
 use App\Modules\Admin\AdminDashboardService;
 use App\Modules\Admin\AdminFinanceService;
+use App\Modules\Admin\PromotionOversightService;
 use App\Modules\Admin\AdminUserService;
 use App\Modules\Analytics\AnalyticsService;
 use App\Modules\Auth\AuthService;
@@ -50,6 +51,7 @@ $payments = new PaymentService(new GatewayRegistry(), $gatewayConfigs, $wallet);
 $adminAuth = new AdminAuthService();
 $adminDashboard = new AdminDashboardService();
 $adminFinance = new AdminFinanceService();
+$promotionOversight = new PromotionOversightService();
 $adminUsers = new AdminUserService($wallet);
 $analytics = new AnalyticsService();
 $casino = new CasinoCatalogService();
@@ -140,6 +142,9 @@ $router->get('/admin/api/promotions/vip/reviews',function(Request $request)use($
 $router->post('/api/promotions/vip/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimVip((string)$user['id'],(int)($request->body['campaign_id']??0))];});
 $router->post('/api/promotions/coupons/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimCoupon((string)$user['id'],(string)($request->body['code']??''))];});
 $router->post('/api/promotions/checkin/redeem',function(Request $request)use($auth,$promotionRedemptions){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['award'=>$promotionRedemptions->claimCheckin((string)$user['id'])];});
+// V23: painéis administrativos de leitura, protegidos por autenticação Admin.
+$router->get('/admin/api/promotions/overview',function(Request $request)use($adminAuth,$promotionOversight){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $promotionOversight->overview();});
+$router->get('/admin/api/promotions/financial-audit',function(Request $request)use($adminAuth,$promotionOversight){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $promotionOversight->audit();});
 $router->get('/admin/api/promotions/redemptions',function(Request $request)use($adminAuth,$promotionRedemptions){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$promotionRedemptions->adminHistory((string)($request->query['type']??''))];});
 
 $router->get('/admin/api/promotion-configs',function(Request $request) use($adminAuth,$promotionConfigs){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$promotionConfigs->list((string)($request->query['type']??''))];});

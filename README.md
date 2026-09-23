@@ -1395,3 +1395,11 @@ Depois configure em **Admin → Promoções → Roleta de Saque** e ative a camp
 2. Padronização visual premium de todos os módulos e testes em diferentes tamanhos de tela.
 3. Gestão administrativa: relatórios de campanhas, alterações e regras com validações.
 4. Auditoria financeira: idempotência, concorrência, rollover, integrações e reconciliação antes de operação com dinheiro real.
+
+## V23.2–V23.4 — Padronização premium, Admin e auditoria local
+- V23.2: CSS compartilhado de promoções com ritmo visual consistente, foco por teclado e ajustes de mobile. Não altera regras de crédito.
+- V23.3: nova Central administrativa de promoções com totais por campanha, status de resgates e últimos 40 registros, em `/admin/api/promotions/overview`.
+- V23.4: diagnóstico financeiro administrativo protegido em `/admin/api/promotions/financial-audit`, **somente leitura**, com oito verificações de inconsistência; limite de 100 registros por verificação e sem consulta a gateways externos.
+- Não há migration adicional. Fonte: tabelas existentes `wallet_accounts`, `ledger_entries`, `financial_transactions`, `promotion_redemptions`, `promotion_wager_allocations` e `promotion_configurations`.
+- Teste de estrutura: `php tests/Unit/PromotionOversightStructureTest.php`. Arquivos JS e PHP sujeitos a lint. Detalhes e roteiro completo em `docs/V23_REFINAMENTO_E_HOMOLOGACAO.md`.
+- **Não homologado para dinheiro real**: conciliação gateway/PlayFiver, testes simultâneos em MySQL e validação visual em navegador móvel real continuam obrigatórios.
