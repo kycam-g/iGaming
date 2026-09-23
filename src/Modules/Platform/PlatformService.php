@@ -13,24 +13,38 @@ final class PlatformService
     public function settings(): array
     {
         $rows=$this->db()->query('SELECT setting_key,setting_value FROM platform_settings')->fetchAll();
-        $data=['site_name'=>'MZ90','support_email'=>'','maintenance'=>'0','accent_color'=>'#e34324','footer_text'=>'','logo_path'=>'','favicon_path'=>'','footer_about'=>'','contact_phone'=>'','social_whatsapp'=>'','social_telegram'=>'','social_instagram'=>'','social_facebook'=>''];
+        $data=['site_name'=>'MZ90','support_email'=>'','maintenance'=>'0','accent_color'=>'#e34324','footer_text'=>'','logo_path'=>'','favicon_path'=>'','footer_about'=>'','contact_phone'=>'','social_whatsapp'=>'','social_telegram'=>'','social_instagram'=>'','social_facebook'=>'','deposit_presets'=>'10,30,50,100','first_deposit_bonus_enabled'=>'1','first_deposit_bonus_min_brl'=>'30.00','first_deposit_bonus_percent'=>'100','first_deposit_bonus_max_brl'=>'0'];
         foreach($rows as $r) $data[$r['setting_key']]=$r['setting_value'];
         return $data;
     }
     public function saveSettings(array $input): array
     {
-        $allowed=['site_name','support_email','maintenance','accent_color','footer_text','logo_path','favicon_path','footer_about','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook'];
+        $allowed=['site_name','support_email','maintenance','accent_color','footer_text','logo_path','favicon_path','footer_about','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook','deposit_presets','first_deposit_bonus_enabled','first_deposit_bonus_min_brl','first_deposit_bonus_percent','first_deposit_bonus_max_brl'];
         $db=$this->db();
         $stmt=$db->prepare('INSERT INTO platform_settings (setting_key,setting_value) VALUES (:k,:v) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)');
         foreach($allowed as $key){
             if(!array_key_exists($key,$input)) continue;
             $value=trim((string)$input[$key]);
-            if($key==='maintenance') $value=filter_var($input[$key],FILTER_VALIDATE_BOOLEAN)?'1':'0';
+            if(in_array($key,['maintenance','first_deposit_bonus_enabled'],true)) $value=filter_var($input[$key],FILTER_VALIDATE_BOOLEAN)?'1':'0';
             if(in_array($key,['logo_path','favicon_path'],true)&&$value!==''&&!preg_match('~^/uploads/identity/[a-z0-9_-]+\.(png|jpg|webp)$~i',$value)) throw new DomainException('Imagem de identidade inválida.');
             if(str_starts_with($key,'social_') && $value!=='' && (!filter_var($value,FILTER_VALIDATE_URL) || !str_starts_with(strtolower($value),'https://'))) throw new DomainException('A rede social exige uma URL HTTPS válida.');
             if($key==='contact_phone' && $value!=='' && !preg_match('/^\+?[0-9() .-]{8,24}$/',$value)) throw new DomainException('Telefone de contato inválido.');
             if($key==='accent_color'&&!preg_match('/^#[0-9a-fA-F]{6}$/',$value)) throw new DomainException('Cor inválida.');
             if($key==='support_email'&&$value!==''&&!filter_var($value,FILTER_VALIDATE_EMAIL)) throw new DomainException('E-mail inválido.');
+            if($key==='deposit_presets'){
+                $parts=array_values(array_unique(array_filter(array_map(static fn($v)=>trim((string)$v),explode(',',$value)),static fn($v)=>$v!=='')));
+                if(!$parts||count($parts)>12)throw new DomainException('Configure entre 1 e 12 valores rápidos de depósito.');
+                $normalized=[];foreach($parts as $part){if(!preg_match('/^\d+(?:[.,]\d{1,2})?$/',$part))throw new DomainException('Valores rápidos de depósito inválidos.');$amount=(float)str_replace(',','.',$part);if($amount<1||$amount>100000)throw new DomainException('Cada valor rápido deve ficar entre R$ 1 e R$ 100.000.');$normalized[]=number_format($amount,2,'.','');}
+                $value=implode(',',$normalized);
+            }
+            if(in_array($key,['first_deposit_bonus_min_brl','first_deposit_bonus_max_brl','first_deposit_bonus_percent'],true)){
+                if(!is_numeric(str_replace(',','.',$value)))throw new DomainException('Configuração do bônus de primeiro depósito inválida.');
+                $number=(float)str_replace(',','.',$value);
+                if($key==='first_deposit_bonus_min_brl'&&($number<1||$number>100000))throw new DomainException('Depósito mínimo do bônus deve ficar entre R$ 1 e R$ 100.000.');
+                if($key==='first_deposit_bonus_max_brl'&&($number<0||$number>1000000))throw new DomainException('Limite máximo do bônus inválido.');
+                if($key==='first_deposit_bonus_percent'&&($number<1||$number>500))throw new DomainException('Percentual do bônus deve ficar entre 1% e 500%.');
+                $value=rtrim(rtrim(number_format($number,2,'.',''),'0'),'.');
+            }
             if(strlen($value)>(in_array($key,['footer_text','footer_about'],true)?500:255)) throw new DomainException('Campo muito longo.');
             $stmt->execute(['k'=>$key,'v'=>$value]);
         }
@@ -122,6 +136,73 @@ final class PlatformService
         $stmt=$this->db()->prepare('DELETE FROM platform_announcements WHERE id=:id');$stmt->execute(['id'=>$id]);
         if(!$stmt->rowCount()) throw new DomainException('Novidade não encontrada.');
     }
+
+    public function floatingIcons(bool $public=false): array
+    {
+        $stmt=$this->db()->prepare("SELECT setting_value FROM platform_settings WHERE setting_key='floating_icons_json' LIMIT 1");
+        $stmt->execute();$raw=$stmt->fetchColumn();
+        $items=json_decode((string)($raw?:'[]'),true);
+        if(!is_array($items))$items=[];
+        if(!$items && $raw===false){
+            $items=[['id'=>'rewards_center','title'=>'Central de Recompensas','image_path'=>'','link_path'=>'/promocoes','module_id'=>'rewards_center','show_when'=>'always','enabled'=>1,'sort_order'=>10]];
+        }
+        $normalized=[];
+        foreach($items as $item){
+            if(!is_array($item))continue;
+            $row=[
+                'id'=>(string)($item['id']??''),
+                'title'=>(string)($item['title']??''),
+                'image_path'=>(string)($item['image_path']??''),
+                'link_path'=>(string)($item['link_path']??''),
+                'module_id'=>(string)($item['module_id']??''),
+                'show_when'=>(string)($item['show_when']??'always'),
+                'enabled'=>(int)!empty($item['enabled']),
+                'sort_order'=>(int)($item['sort_order']??100),
+            ];
+            if($public&&!$row['enabled'])continue;
+            $normalized[]=$row;
+        }
+        usort($normalized,static fn($a,$b)=>$a['sort_order']<=>$b['sort_order'] ?: strcmp($a['id'],$b['id']));
+        return $normalized;
+    }
+    private function writeFloatingIcons(array $items): void
+    {
+        $stmt=$this->db()->prepare("INSERT INTO platform_settings(setting_key,setting_value) VALUES('floating_icons_json',?) ON DUPLICATE KEY UPDATE setting_value=VALUES(setting_value)");
+        $stmt->execute([json_encode(array_values($items),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
+    }
+    public function saveFloatingIcon(array $input): array
+    {
+        $allowedModules=['','rewards_center','roulette','vip','cashwheel','checkin','chests','coupons','rebate','agency','rescue','lottery'];
+        $allowedShow=['always','any_reward','module_available'];
+        $id=preg_replace('/[^a-z0-9_-]/i','',trim((string)($input['id']??'')));
+        if($id==='')$id='float_'.bin2hex(random_bytes(5));
+        $title=trim((string)($input['title']??''));
+        $image=trim((string)($input['image_path']??''));
+        $link=trim((string)($input['link_path']??''));
+        $module=trim((string)($input['module_id']??''));
+        $show=trim((string)($input['show_when']??'always'));
+        $order=max(0,min(100000,(int)($input['sort_order']??100)));
+        if($title===''||mb_strlen($title)>120)throw new DomainException('Informe um título de até 120 caracteres.');
+        if($image!==''&&!preg_match('~^/uploads/floats/[a-z0-9_-]+\.(?:png|jpg|webp|gif)$~i',$image))throw new DomainException('Imagem do ícone flutuante inválida.');
+        if($link!==''&&!preg_match('~^(?:/(?:$|[a-z0-9/_-]+)|https://[^\s]{1,500})$~i',$link))throw new DomainException('Informe um link interno ou HTTPS válido.');
+        if(!in_array($module,$allowedModules,true))throw new DomainException('Módulo associado inválido.');
+        if(!in_array($show,$allowedShow,true))throw new DomainException('Regra de exibição inválida.');
+        if($show==='module_available'&&$module==='')throw new DomainException('Selecione um módulo para usar a disponibilidade do módulo.');
+        $items=$this->floatingIcons(false);$found=false;
+        $row=['id'=>$id,'title'=>$title,'image_path'=>$image,'link_path'=>$link,'module_id'=>$module,'show_when'=>$show,'enabled'=>filter_var($input['enabled']??false,FILTER_VALIDATE_BOOLEAN)?1:0,'sort_order'=>$order];
+        foreach($items as $i=>$item)if((string)$item['id']===$id){$items[$i]=$row;$found=true;break;}
+        if(!$found)$items[]=$row;
+        $this->writeFloatingIcons($items);
+        return $row;
+    }
+    public function deleteFloatingIcon(string $id): void
+    {
+        $id=trim($id);if($id==='')throw new DomainException('Ícone inválido.');
+        $items=$this->floatingIcons(false);$filtered=array_values(array_filter($items,static fn($item)=>(string)$item['id']!==$id));
+        if(count($filtered)===count($items))throw new DomainException('Ícone não encontrado.');
+        $this->writeFloatingIcons($filtered);
+    }
+
     public function audits(array $filter): array
     {
         $page=max(1,min(100000,(int)($filter['page']??1)));$limit=30;

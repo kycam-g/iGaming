@@ -1439,3 +1439,71 @@ Foram adicionadas consultas somente leitura para:
 - nenhuma rotina de diagnóstico corrige ou movimenta valores automaticamente;
 - a elegibilidade final continua sendo validada no servidor no momento de cada resgate;
 - não há migration nova nesta versão.
+
+## V24.1 — Menu Admin A-Z + Central de Notificações
+
+### Menu administrativo
+- todos os menus existentes foram preservados;
+- itens de cada grupo foram reorganizados em ordem alfabética;
+- submenus de **Jogos** e **Promoções** também foram ordenados alfabeticamente;
+- novo item **Notificações** adicionado à área Plataforma.
+
+### Notificações da plataforma
+O sino do cabeçalho deixou de representar a Central de Recompensas e agora é exclusivo das mensagens da plataforma.
+
+Categorias iniciais:
+- **Anúncios** — comunicados e novidades;
+- **Sistema** — manutenção, mudanças técnicas e avisos operacionais;
+- **Usuário** — mensagens destinadas a um jogador específico;
+- **Suporte** — respostas/comunicados da equipe de atendimento.
+
+O Admin permite cadastrar notificação para todos ou para um jogador específico por ID público, UUID, usuário ou e-mail, além de configurar período, link interno e status de publicação.
+
+As notificações possuem controle de leitura individual. O sino exibe somente a quantidade de mensagens não lidas.
+
+### Central de Recompensas
+- removida do sino;
+- ganhou um ícone flutuante de presente;
+- o badge verde no ícone mostra quantas promoções/recompensas o jogador possui desbloqueadas;
+- ao tocar no ícone, a página de Promoções abre diretamente na Central de Recompensas.
+
+### Banco de dados
+Nova migration obrigatória:
+- `034_platform_notifications.sql`
+
+Execute após atualizar:
+`php bin/migrate.php`
+
+
+## V24.2 — Admin alfabético + depósitos configuráveis
+- Menu principal do Admin reorganizado em ordem alfabética sem remover páginas.
+- Ícone de Notificações trocado por sino vetorial no mesmo padrão visual dos demais ícones.
+- Botão Sair movido para o perfil no canto superior direito, abaixo do nome do administrador.
+- Removida do Admin a seção antiga de campanhas/imagens promocionais (`+ Nova promoção`); os módulos de Promoções permanecem intactos.
+- Configurações gerais agora permitem definir valores rápidos de depósito (ex.: 10, 30, 50, 100).
+- Oferta de primeiro depósito configurável: ativação, valor mínimo, percentual e teto máximo opcional.
+- O bônus de primeiro depósito é calculado somente após o primeiro depósito PAID elegível e creditado no saldo disponível com idempotência por pagamento.
+- Modal de depósito exibe botões com valores predefinidos e prévia do bônus quando aplicável.
+- Não há migration nova nesta versão: as novas regras usam `platform_settings`.
+
+## V24.3 — Central de Promoções isolada e menu administrativo
+
+- Dashboard voltou a ser o primeiro item do menu administrativo.
+- Demais itens principais permanecem organizados alfabeticamente, sem remoção de páginas.
+- Adicionado o submenu `Central de Promoções` dentro de `Promoções`.
+- A Central administrativa de promoções, diagnóstico por jogador e diagnóstico financeiro agora aparecem somente em `Promoções > Central de Promoções`.
+- Cada módulo de promoção exibe apenas suas próprias configurações, relatórios e informações específicas.
+- Ao abrir um módulo como Giro da Sorte, VIP, Rebate, Sorteio etc., os painéis gerais da Central ficam ocultos para reduzir poluição visual.
+- Cache de CSS/JS do Admin atualizado para V24.3.
+- Não há migration nova nesta versão.
+
+
+## V24.4 — Ícones flutuantes configuráveis
+- Aparência → Ícones flutuantes agora permite criar vários atalhos promocionais.
+- Imagem editável com PNG, JPG, WebP e GIF animado (até 5 MB).
+- Link interno/HTTPS opcional.
+- Associação direta a módulos de promoções ou à Central de Recompensas.
+- Regras de exibição: sempre, quando houver qualquer recompensa ou quando o módulo associado estiver disponível ao jogador.
+- Badge dinâmico mostra a quantidade na Central de Recompensas e sinaliza disponibilidade nos módulos.
+- Ícones foram posicionados mais acima da barra inferior e empilham verticalmente quando houver vários.
+- Sem migration nova: a configuração usa `platform_settings`.

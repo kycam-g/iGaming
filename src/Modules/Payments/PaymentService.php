@@ -25,6 +25,28 @@ final class PaymentService
         return $this->configs->publicFor($operation);
     }
 
+    public function depositOffer(?string $userId): array
+    {
+        $db=Database::connection();
+        $rows=$db->query("SELECT setting_key,setting_value FROM platform_settings WHERE setting_key IN ('deposit_presets','first_deposit_bonus_enabled','first_deposit_bonus_min_brl','first_deposit_bonus_percent','first_deposit_bonus_max_brl')")->fetchAll();
+        $settings=['deposit_presets'=>'10,30,50,100','first_deposit_bonus_enabled'=>'1','first_deposit_bonus_min_brl'=>'30','first_deposit_bonus_percent'=>'100','first_deposit_bonus_max_brl'=>'0'];
+        foreach($rows as $row)$settings[(string)$row['setting_key']]=(string)$row['setting_value'];
+        $presets=[];foreach(explode(',',$settings['deposit_presets']) as $value){$amount=(int)round(((float)trim($value))*100);if($amount>0)$presets[]=$amount;}
+        $eligible=false;
+        if($userId){$stmt=$db->prepare("SELECT 1 FROM payment_transactions WHERE user_id=? AND kind='DEPOSIT' AND status='PAID' LIMIT 1");$stmt->execute([$userId]);$eligible=!$stmt->fetchColumn();}
+        return [
+            'presets_minor'=>array_values(array_unique($presets)),
+            'first_deposit_bonus'=>[
+                'enabled'=>$settings['first_deposit_bonus_enabled']==='1',
+                'eligible'=>$eligible,
+                'minimum_minor'=>(int)round(((float)$settings['first_deposit_bonus_min_brl'])*100),
+                'percent'=>(float)$settings['first_deposit_bonus_percent'],
+                'maximum_minor'=>(int)round(((float)$settings['first_deposit_bonus_max_brl'])*100),
+                'account_type'=>'CASH',
+            ],
+        ];
+    }
+
     public function createDeposit(string $userId, ?string $gatewayCode, int $amountMinor, string $idempotencyKey): array
     {
         if ($amountMinor < 100) throw new DomainException('O depósito mínimo é R$ 1,00.');
@@ -36,14 +58,16 @@ final class PaymentService
         if ($amountMinor < $min) throw new DomainException('Valor abaixo do mínimo permitido pelo gateway.');
         if ($max !== null && $amountMinor > $max) throw new DomainException('Valor acima do máximo permitido pelo gateway.');
 
+        $offer=$this->depositOffer($userId);
+        $bonusSnapshot=is_array($offer['first_deposit_bonus']??null)?$offer['first_deposit_bonus']:[];
         $existing = $this->findByIdempotency($userId, 'DEPOSIT', $idempotencyKey);
         if ($existing) return $this->formatPayment($existing, true);
 
         $paymentId = $this->uuid();
         try {
-            Database::transaction(function (PDO $pdo) use ($paymentId, $userId, $config, $amountMinor, $idempotencyKey): void {
-                $stmt = $pdo->prepare("INSERT INTO payment_transactions (id,user_id,gateway_code,kind,status,amount_minor,currency,idempotency_key,metadata) VALUES (:id,:user_id,:gateway,'DEPOSIT','PENDING',:amount,'BRL',:idem,'{}')");
-                $stmt->execute(['id'=>$paymentId,'user_id'=>$userId,'gateway'=>$config['code'],'amount'=>$amountMinor,'idem'=>$idempotencyKey]);
+            Database::transaction(function (PDO $pdo) use ($paymentId, $userId, $config, $amountMinor, $idempotencyKey, $bonusSnapshot): void {
+                $stmt = $pdo->prepare("INSERT INTO payment_transactions (id,user_id,gateway_code,kind,status,amount_minor,currency,idempotency_key,metadata) VALUES (:id,:user_id,:gateway,'DEPOSIT','PENDING',:amount,'BRL',:idem,:metadata)");
+                $stmt->execute(['id'=>$paymentId,'user_id'=>$userId,'gateway'=>$config['code'],'amount'=>$amountMinor,'idem'=>$idempotencyKey,'metadata'=>json_encode(['first_deposit_bonus'=>$bonusSnapshot],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
             });
         } catch (PDOException $e) {
             $existing = $this->findByIdempotency($userId, 'DEPOSIT', $idempotencyKey);
@@ -71,7 +95,7 @@ final class PaymentService
                 'payment_code'=>$created['payment_code']??null,
                 'qr'=>$created['qr_code']??null,
                 'expires_at'=>$created['expires_at']??null,
-                'metadata'=>json_encode($created['metadata']??[],JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
+                'metadata'=>json_encode(array_merge(is_array($created['metadata']??null)?$created['metadata']:[],['first_deposit_bonus'=>$bonusSnapshot]),JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),
                 'id'=>$paymentId,
             ]);
         } catch (\Throwable $e) {
@@ -146,17 +170,36 @@ final class PaymentService
 
     private function creditDepositOnce(array $payment): void
     {
-        $claim=Database::transaction(function(PDO $pdo) use($payment): ?array {
+        $claim=Database::transaction(function(PDO $pdo) use($payment): array {
             $stmt=$pdo->prepare('SELECT * FROM payment_transactions WHERE id=:id FOR UPDATE'); $stmt->execute(['id'=>$payment['id']]); $row=$stmt->fetch();
             if(!$row) throw new DomainException('Payment not found.');
-            if($row['status']==='PAID') return null;
+            if($row['status']==='PAID') return ['row'=>$row,'credit_cash'=>false];
             if(!in_array($row['status'],['PENDING','PROCESSING'],true)) throw new DomainException('Deposit cannot be confirmed in its current status.');
             $pdo->prepare("UPDATE payment_transactions SET status='PROCESSING' WHERE id=:id")->execute(['id'=>$row['id']]);
-            return $row;
+            return ['row'=>$row,'credit_cash'=>true];
         });
-        if($claim===null) return;
-        $this->wallet->credit((string)$claim['user_id'],'CASH',(int)$claim['amount_minor'],'payment_deposit',(string)$claim['id'],'payment-credit:'.$claim['id'],'DEPOSIT');
-        Database::connection()->prepare("UPDATE payment_transactions SET status='PAID' WHERE id=:id")->execute(['id'=>$claim['id']]);
+        $row=$claim['row'];
+        if($claim['credit_cash']){
+            $this->wallet->credit((string)$row['user_id'],'CASH',(int)$row['amount_minor'],'payment_deposit',(string)$row['id'],'payment-credit:'.$row['id'],'DEPOSIT');
+            Database::connection()->prepare("UPDATE payment_transactions SET status='PAID' WHERE id=:id")->execute(['id'=>$row['id']]);
+        }
+        $this->creditFirstDepositBonusOnce($row);
+    }
+
+    private function creditFirstDepositBonusOnce(array $payment): void
+    {
+        $metadata=json_decode((string)($payment['metadata']??''),true);
+        $cfg=is_array($metadata['first_deposit_bonus']??null)?$metadata['first_deposit_bonus']:[];
+        if(empty($cfg['enabled'])||empty($cfg['eligible']))return;
+        $amount=(int)$payment['amount_minor'];$minimum=(int)($cfg['minimum_minor']??0);
+        if($minimum<1||$amount<$minimum)return;
+        $db=Database::connection();
+        $stmt=$db->prepare("SELECT id FROM payment_transactions WHERE user_id=? AND kind='DEPOSIT' AND status='PAID' ORDER BY updated_at ASC,created_at ASC,id ASC LIMIT 1");
+        $stmt->execute([$payment['user_id']]);
+        if((string)$stmt->fetchColumn()!==(string)$payment['id'])return;
+        $percent=(float)($cfg['percent']??0);if($percent<=0)return;
+        $bonus=(int)floor($amount*($percent/100));$max=(int)($cfg['maximum_minor']??0);if($max>0)$bonus=min($bonus,$max);if($bonus<1)return;
+        $this->wallet->credit((string)$payment['user_id'],'CASH',$bonus,'first_deposit_bonus',(string)$payment['id'],'first-deposit-bonus:'.$payment['id'],'PROMOTION');
     }
 
     private function findWebhookPayment(string $gatewayCode,string $localPaymentId,string $remoteTransaction): ?array

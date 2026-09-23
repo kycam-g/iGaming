@@ -18,7 +18,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24-2">
 </head>
 <body>
 <div class="mobile-stage">
@@ -60,16 +60,18 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <button class="balance-pill" data-open-auth="register">Criar conta</button>
     </div>
     <div id="user-actions" class="header-actions hidden">
-      <button class="reward-bell" id="reward-notification-toggle" type="button" aria-label="Recompensas disponíveis" aria-expanded="false"><span aria-hidden="true">🔔</span><b id="reward-notification-badge" class="reward-count hidden">0</b></button>
+      <button class="notification-bell" id="notification-toggle" type="button" aria-label="Notificações" aria-expanded="false"><span aria-hidden="true">🔔</span><b id="notification-badge" class="notification-count hidden">0</b></button>
       <button class="balance-pill" data-section="profile"><span id="header-balance">R$ 0,00</span></button>
       <button class="profile-mini" id="user-avatar" type="button" aria-label="Abrir meu perfil" title="Meu perfil"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></button>
     </div>
   </header>
-  <aside id="reward-notification-panel" class="reward-notification-panel hidden" aria-label="Notificações de recompensas">
-    <div class="reward-notification-head"><div><strong>Recompensas</strong><small>Benefícios disponíveis na sua conta</small></div><button type="button" id="reward-notification-close" aria-label="Fechar">×</button></div>
-    <div id="reward-notification-list" class="reward-notification-list"><p>Nenhuma recompensa disponível.</p></div>
-    <button type="button" class="reward-notification-all" id="reward-notification-all">Ver Central de Recompensas</button>
+  <aside id="notification-panel" class="notification-panel hidden" aria-label="Central de notificações">
+    <div class="notification-head"><div><strong>Notificações</strong><small>Mensagens da plataforma e do suporte</small></div><button type="button" id="notification-close" aria-label="Fechar">×</button></div>
+    <div class="notification-filters" role="tablist" aria-label="Categorias de notificações"><button type="button" class="active" data-notification-filter="all">Todas</button><button type="button" data-notification-filter="announcement">Anúncios</button><button type="button" data-notification-filter="system">Sistema</button><button type="button" data-notification-filter="user">Usuário</button><button type="button" data-notification-filter="support">Suporte</button></div>
+    <div id="notification-list" class="notification-list"><p>Nenhuma notificação.</p></div>
+    <button type="button" class="notification-read-all" id="notification-read-all">Marcar todas como lidas</button>
   </aside>
+  <div id="floating-icons-stack" class="floating-icons-stack" aria-label="Atalhos promocionais"></div>
 
   <main class="content" id="content">
     <section class="page-section active" id="section-home">
@@ -174,7 +176,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 
   <nav class="bottom-nav" aria-label="Navegação principal">
     <button class="bottom-item active" data-section="home"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg></i><span id="home-nav-label">Início</span></button>
-    <button class="bottom-item" data-section="promotions"><b id="promotions-nav-badge" class="bottom-reward-badge hidden">0</b><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l-1 6h3l-6 10 1-7H6l1-9Z"/></svg></i><span>Promoção</span></button>
+    <button class="bottom-item" data-section="promotions"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l-1 6h3l-6 10 1-7H6l1-9Z"/></svg></i><span>Promoção</span></button>
     <button class="bottom-item center" id="deposit-nav" type="button"><i aria-hidden="true" class="bottom-center-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8a3 3 0 0 1 3-3h11l4 4v9a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3Z"/><path d="M3 9h18"/><path d="M15 14h3"/></svg></i><span>Depósito</span></button>
     <button class="bottom-item" id="invite-agency-nav" type="button"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M3 20a6 6 0 0 1 12 0"/><path d="M17 8h4"/><path d="M19 6v4"/></svg></i><span>Convidar</span></button>
     <button class="bottom-item" id="profile-nav"><i aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4.5 21a7.5 7.5 0 0 1 15 0"/></svg></i><span>Perfil</span></button>
@@ -198,8 +200,10 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
     <div class="alert hidden" id="payment-alert"></div>
     <form id="deposit-form" class="payment-form">
       <label>Valor do depósito
-        <div class="money-input"><span>R$</span><input type="number" name="amount" min="1" step="0.01" value="20.00" required></div>
+        <div class="money-input"><span>R$</span><input type="number" name="amount" min="1" step="0.01" value="10.00" required></div>
       </label>
+      <div id="deposit-presets" class="deposit-presets" aria-label="Valores rápidos de depósito"></div>
+      <div id="first-deposit-bonus-note" class="first-deposit-bonus-note hidden" role="status"></div>
       <label>Gateway<select name="gateway_code" id="gateway-select" required></select></label>
       <button class="gold-btn full" id="generate-pix" type="submit"><span class="btn-label">GERAR PIX</span><span class="btn-spinner" aria-hidden="true"></span></button>
     </form>
@@ -217,8 +221,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24" defer></script>
-<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-2"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-2" defer></script>
+<script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24-1" defer></script>
 </body>
 </html>

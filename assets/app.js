@@ -4,7 +4,7 @@
   // O parâmetro público só é capturado antes do cadastro; vínculo efetivo ocorre no servidor.
   const referralParam=(new URLSearchParams(window.location.search)).get('ref')||'';
   if(/^[a-f0-9]{20}$/i.test(referralParam))sessionStorage.setItem('mz90_referral_code',referralParam.toUpperCase());
-  const state={token:localStorage.getItem('igaming_token')||'',user:null,accounts:[],transactions:[],paymentGateways:[],activePayment:null,depositInFlight:false,depositIdempotencyKey:'',paymentPoll:null};
+  const state={token:localStorage.getItem('igaming_token')||'',user:null,accounts:[],transactions:[],paymentGateways:[],depositOffer:null,activePayment:null,depositInFlight:false,depositIdempotencyKey:'',paymentPoll:null,notifications:[],notificationFilter:'all',notificationTimer:null};
   const $=(s,r=document)=>r.querySelector(s), $$=(s,r=document)=>[...r.querySelectorAll(s)];
   const money=(minor=0,currency='BRL')=>new Intl.NumberFormat('pt-BR',{style:'currency',currency}).format(Number(minor)/100);
   const api=async(path,options={})=>{const headers={'Accept':'application/json',...(options.body?{'Content-Type':'application/json'}:{}),...(options.headers||{})};if(state.token)headers.Authorization=`Bearer ${state.token}`;const res=await fetch(`${base}${path}`,{...options,headers});let data={};try{data=await res.json()}catch{}if(!res.ok)throw new Error(data.message||data.error||`Erro ${res.status}`);return data};
@@ -200,11 +200,31 @@
   async function restore(){if(!state.token){renderAuth();renderWallet();return}try{const r=await api('/api/me');state.user=r.user;renderAuth();await loadWallet();document.dispatchEvent(new Event('mz:auth-ready'))}catch{logout(false)}}
   async function logout(callApi=true){try{if(callApi&&state.token)await api('/api/auth/logout',{method:'POST'})}catch{}state.token='';state.user=null;state.accounts=[];state.transactions=[];localStorage.removeItem('igaming_token');renderAuth();renderWallet();document.dispatchEvent(new Event('mz:auth-changed'));toast('Sessão encerrada.')}
   $('#user-avatar').addEventListener('click',()=>state.user?section('profile'):openAuth('login'));$('#profile-nav').addEventListener('click',()=>state.user?section('profile'):openAuth('login'));$('#profile-logout').addEventListener('click',async()=>{await logout(true);section('home')});$('#refresh-wallet')?.addEventListener('click',loadWallet);$('#transaction-filter')?.addEventListener('change',renderWallet);
-  const rewardPanel=$('#reward-notification-panel');const closeRewardPanel=()=>{rewardPanel?.classList.add('hidden');$('#reward-notification-toggle')?.setAttribute('aria-expanded','false')};
-  $('#reward-notification-toggle')?.addEventListener('click',()=>{if(!rewardPanel)return;const opening=rewardPanel.classList.contains('hidden');rewardPanel.classList.toggle('hidden',!opening);$('#reward-notification-toggle')?.setAttribute('aria-expanded',opening?'true':'false')});
-  $('#reward-notification-close')?.addEventListener('click',closeRewardPanel);$('#reward-notification-all')?.addEventListener('click',()=>{closeRewardPanel();section('promotions')});
-  document.addEventListener('click',event=>{if(rewardPanel&&!rewardPanel.classList.contains('hidden')&&!rewardPanel.contains(event.target)&&!$('#reward-notification-toggle')?.contains(event.target))closeRewardPanel()});
-  async function loadPaymentGateways(){const r=await api('/api/payments/gateways');state.paymentGateways=r.gateways||[];$('#gateway-select').innerHTML=state.paymentGateways.map(g=>`<option value="${g.code}">${g.name}${g.sandbox?' • Sandbox':''}</option>`).join('')}
+  const notificationPanel=$('#notification-panel');
+  const notificationMeta={announcement:{label:'Anúncios',icon:'📣'},system:{label:'Sistema',icon:'⚙️'},user:{label:'Usuário',icon:'👤'},support:{label:'Suporte',icon:'💬'}};
+  const closeNotificationPanel=()=>{notificationPanel?.classList.add('hidden');$('#notification-toggle')?.setAttribute('aria-expanded','false')};
+  function renderNotifications(){
+    const host=$('#notification-list');if(!host)return;host.replaceChildren();
+    if(!state.user){const p=document.createElement('p');p.textContent='Entre na sua conta para consultar notificações.';host.append(p);return;}
+    const rows=state.notifications.filter(item=>state.notificationFilter==='all'||item.category===state.notificationFilter);
+    if(!rows.length){const p=document.createElement('p');p.textContent='Nenhuma notificação nesta categoria.';host.append(p);return;}
+    for(const item of rows){const button=document.createElement('button');button.type='button';button.className='notification-item'+(!item.is_read?' is-unread':'');button.dataset.notificationId=String(item.id);if(item.link_path)button.dataset.notificationLink=item.link_path;const meta=notificationMeta[item.category]||{label:item.category,icon:'•'};const icon=document.createElement('span');icon.className='notification-item-icon';icon.textContent=meta.icon;const title=document.createElement('strong');title.textContent=item.title;const message=document.createElement('p');message.textContent=item.message;const small=document.createElement('small');const created=new Date(String(item.created_at||'').replace(' ','T'));small.textContent=meta.label+(Number.isNaN(created.getTime())?'':' • '+created.toLocaleString('pt-BR'));button.append(icon,title,message,small);if(!item.is_read){const dot=document.createElement('span');dot.className='notification-item-dot';button.append(dot)}host.append(button);}
+  }
+  function updateNotificationBadge(){const unread=state.notifications.filter(item=>!item.is_read).length;const badge=$('#notification-badge');if(badge){badge.textContent=String(unread);badge.classList.toggle('hidden',unread===0);}}
+  async function loadNotifications(){if(!state.token||!state.user){state.notifications=[];renderNotifications();updateNotificationBadge();return;}try{const data=await api('/api/notifications');state.notifications=Array.isArray(data.items)?data.items:[];renderNotifications();updateNotificationBadge();}catch(error){console.warn('Falha ao carregar notificações:',error.message)}}
+  async function markNotificationRead(id){const item=state.notifications.find(row=>Number(row.id)===Number(id));if(!item||item.is_read)return;try{await api('/api/notifications/read',{method:'POST',body:JSON.stringify({id:Number(id)})});item.is_read=true;renderNotifications();updateNotificationBadge();}catch{}}
+  $('#notification-toggle')?.addEventListener('click',async()=>{if(!notificationPanel)return;const opening=notificationPanel.classList.contains('hidden');notificationPanel.classList.toggle('hidden',!opening);$('#notification-toggle')?.setAttribute('aria-expanded',opening?'true':'false');if(opening)await loadNotifications();});
+  $('#notification-close')?.addEventListener('click',closeNotificationPanel);
+  $$('.notification-filters button').forEach(button=>button.addEventListener('click',()=>{$$('.notification-filters button').forEach(item=>item.classList.toggle('active',item===button));state.notificationFilter=button.dataset.notificationFilter||'all';renderNotifications();}));
+  $('#notification-list')?.addEventListener('click',async event=>{const button=event.target.closest('.notification-item');if(!button)return;await markNotificationRead(button.dataset.notificationId);const link=button.dataset.notificationLink||'';if(link){if(link==='/promocoes'){closeNotificationPanel();section('promotions');}else if(link==='/carteira'){closeNotificationPanel();section('profile');}else if(link==='/cassino'){closeNotificationPanel();section('casino');}else if(link==='/'){closeNotificationPanel();section('home');}else location.href=link;}});
+  $('#notification-read-all')?.addEventListener('click',async()=>{if(!state.user)return;try{await api('/api/notifications/read-all',{method:'POST',body:'{}'});state.notifications.forEach(item=>item.is_read=true);renderNotifications();updateNotificationBadge();}catch(error){toast(error.message);}});
+  document.addEventListener('click',event=>{if(notificationPanel&&!notificationPanel.classList.contains('hidden')&&!notificationPanel.contains(event.target)&&!$('#notification-toggle')?.contains(event.target))closeNotificationPanel()});
+  document.addEventListener('mz:auth-ready',()=>{loadNotifications();if(state.notificationTimer)clearInterval(state.notificationTimer);state.notificationTimer=setInterval(loadNotifications,60000);});
+  document.addEventListener('mz:auth-changed',()=>{if(state.notificationTimer){clearInterval(state.notificationTimer);state.notificationTimer=null;}state.notifications=[];renderNotifications();updateNotificationBadge();closeNotificationPanel();});
+  async function loadPaymentGateways(){const r=await api('/api/payments/gateways');state.paymentGateways=r.gateways||[];state.depositOffer=r.offer||null;$('#gateway-select').innerHTML=state.paymentGateways.map(g=>`<option value="${g.code}">${g.name}${g.sandbox?' • Sandbox':''}</option>`).join('');renderDepositOffer()}
+  function renderDepositOffer(){const host=$('#deposit-presets'),note=$('#first-deposit-bonus-note'),input=$('#deposit-form [name=amount]');if(!host||!input)return;host.replaceChildren();const presets=Array.isArray(state.depositOffer?.presets_minor)?state.depositOffer.presets_minor:[];for(const minor of presets){const b=document.createElement('button');b.type='button';b.className='deposit-preset';b.textContent=money(minor);b.addEventListener('click',()=>{input.value=(Number(minor)/100).toFixed(2);host.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x===b));updateDepositBonusPreview()});host.append(b)}updateDepositBonusPreview()}
+  function updateDepositBonusPreview(){const note=$('#first-deposit-bonus-note'),input=$('#deposit-form [name=amount]');if(!note||!input)return;const cfg=state.depositOffer?.first_deposit_bonus;if(!cfg?.enabled){note.classList.add('hidden');return}note.classList.remove('hidden');if(!cfg.eligible){note.className='first-deposit-bonus-note is-used';note.textContent='Bônus de primeiro depósito já utilizado nesta conta.';return}const amount=Math.max(0,Math.round(Number(input.value||0)*100));const min=Number(cfg.minimum_minor||0),percent=Number(cfg.percent||0),max=Number(cfg.maximum_minor||0);if(amount<min){note.className='first-deposit-bonus-note';note.textContent=`1º depósito: ${percent.toLocaleString('pt-BR')}% de bônus a partir de ${money(min)}.`;return}let bonus=Math.floor(amount*(percent/100));if(max>0)bonus=Math.min(bonus,max);note.className='first-deposit-bonus-note is-eligible';note.textContent=`Você recebe ${money(bonus)} de bônus no primeiro depósito confirmado.`}
+  $('#deposit-form [name=amount]')?.addEventListener('input',()=>{$$('#deposit-presets button').forEach(b=>b.classList.remove('active'));updateDepositBonusPreview()});
   const clearPaymentPoll=()=>{if(state.paymentPoll){clearInterval(state.paymentPoll);state.paymentPoll=null}};
   const closePayment=()=>{clearPaymentPoll();$('#payment-modal').classList.add('hidden')};
   const newIdempotencyKey=()=>crypto.randomUUID?crypto.randomUUID():`${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -220,9 +240,31 @@
   $('#sandbox-confirm').addEventListener('click',async()=>{if(!state.activePayment)return;try{const r=await api('/api/payments/sandbox/confirm',{method:'POST',body:JSON.stringify({payment_id:state.activePayment.id})});renderPayment(r.payment);$('#sandbox-confirm').classList.add('hidden');await loadWallet()}catch(e){paymentError(e)}});
   $('#withdraw-placeholder').addEventListener('click',()=>toast('Saques serão habilitados quando definirmos o primeiro gateway de payout.'));
 
+  let floatingIconItems=[];let rewardSummary={count:0,modules:[]};
+  function openFloatingDestination(item){
+    const moduleId=String(item.module_id||'');
+    if(moduleId==='rewards_center'){section('promotions');setTimeout(()=>$('#mz-rewards-center')?.scrollIntoView({behavior:'smooth',block:'start'}),120);return;}
+    if(moduleId){section('promotions');setTimeout(()=>document.dispatchEvent(new CustomEvent('mz:open-promotion',{detail:{id:moduleId}})),40);return;}
+    const link=String(item.link_path||'');if(!link)return;if(/^https:\/\//i.test(link)){window.open(link,'_blank','noopener,noreferrer');return;}
+    if(link==='/promocoes'){section('promotions');return;}if(link==='/cassino'){section('casino');return;}if(link==='/carteira'){section('profile');return;}if(link==='/'){section('home');return;}location.href=link;
+  }
+  function renderFloatingIcons(){
+    const host=$('#floating-icons-stack');if(!host)return;host.replaceChildren();
+    const availableIds=new Set((rewardSummary.modules||[]).map(item=>String(item.id)));
+    for(const item of floatingIconItems){
+      const moduleId=String(item.module_id||'');const show=String(item.show_when||'always');const moduleAvailable=moduleId==='rewards_center'?rewardSummary.count>0:availableIds.has(moduleId);
+      if(show==='any_reward'&&rewardSummary.count<=0)continue;if(show==='module_available'&&!moduleAvailable)continue;
+      const button=document.createElement('button');button.type='button';button.className='floating-promo-icon';button.title=item.title||'Promoção';button.setAttribute('aria-label',item.title||'Abrir promoção');
+      if(item.image_path){const img=document.createElement('img');img.src=item.image_path;img.alt='';img.loading='eager';button.append(img)}else{const fallback=document.createElement('span');fallback.textContent=moduleId==='rewards_center'?'🎁':'✦';button.append(fallback)}
+      let badgeValue=0;if(moduleId==='rewards_center')badgeValue=Number(rewardSummary.count||0);else if(moduleAvailable)badgeValue=1;
+      if(badgeValue>0){const badge=document.createElement('b');badge.className='floating-promo-badge';badge.textContent=String(badgeValue);button.append(badge);button.classList.add('has-available')}
+      button.addEventListener('click',()=>openFloatingDestination(item));host.append(button);
+    }
+  }
+  document.addEventListener('mz:rewards-summary',event=>{rewardSummary=event.detail||{count:0,modules:[]};renderFloatingIcons();});
   async function loadPlatformContent(){
     try{
-      const data=await api('/api/platform/public');const settings=data.settings||{};
+      const data=await api('/api/platform/public');const settings=data.settings||{};floatingIconItems=Array.isArray(data.floating_icons)?data.floating_icons:[];renderFloatingIcons();
       setBrowserFavicon(settings.favicon_path);
       if(/^#[0-9a-fA-F]{6}$/.test(settings.accent_color||''))document.documentElement.style.setProperty('--platform-accent',settings.accent_color);
       if(settings.site_name){document.title=settings.site_name;document.querySelectorAll('.brand-text b,.auth-brand strong,#drawer-brand-name').forEach(el=>el.textContent=settings.site_name);}
