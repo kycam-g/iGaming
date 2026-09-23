@@ -1672,3 +1672,13 @@ Antes de produção, homologue `provider_list`, `game_list`, `game_launch`, sald
 - Quando preenchido, o endereço precisa ser HTTPS público; quando vazio, o campo não é enviado à API.
 - O callback recomendado permanece `https://SEU_DOMINIO/api/bspay/callback`.
 - Nenhuma migration nova nesta correção.
+
+
+## V24.11 — Correção de retorno PIX AbilityPay
+
+- Corrigida a leitura da resposta de criação de cobrança da AbilityPay.
+- Mantido suporte ao formato oficial com `external_id` e `pix_code` na raiz.
+- Adicionado suporte defensivo a respostas encapsuladas em `data` e aliases comuns de QR Code, sem remover as validações oficiais do BR Code.
+- A validação de `BR.GOV.BCB.PIX` agora é case-insensitive e ignora espaços/quebras acidentais.
+- Mensagens de erro agora distinguem `external_id` ausente, `pix_code` ausente, provider `LOCAL` e BR Code inválido.
+- Nenhuma migration nova.

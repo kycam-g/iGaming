@@ -39,20 +39,38 @@ final class AbilityPayGateway implements PaymentGateway
 
         $response = $this->request('POST', '/integrations/pix/charges', $payload);
         $body = $response['body'];
-        if ($response['status'] < 200 || $response['status'] >= 300) throw new DomainException((string)($body['message'] ?? 'Falha ao gerar cobrança PIX na AbilityPay.'));
+        if ($response['status'] < 200 || $response['status'] >= 300) throw new DomainException((string)($body['message'] ?? $body['error'] ?? 'Falha ao gerar cobrança PIX na AbilityPay.'));
 
-        $externalId = trim((string)($body['external_id'] ?? ''));
-        $pixCode = trim((string)($body['pix_code'] ?? ''));
-        $provider = strtoupper(trim((string)($body['provider'] ?? '')));
-        if ($externalId === '' || !$this->validPixCode($pixCode) || $provider === 'LOCAL') throw new DomainException('A AbilityPay não retornou uma cobrança PIX válida. Tente novamente.');
+        // A documentação atual mostra os campos na raiz, mas algumas contas/versões
+        // podem encapsular a resposta em "data". Aceitamos ambos sem enfraquecer
+        // as validações obrigatórias do BR Code.
+        $dataBody = is_array($body['data'] ?? null) ? $body['data'] : $body;
+        $paymentInfo = is_array($dataBody['payment_info'] ?? null) ? $dataBody['payment_info'] : [];
+        $externalId = trim((string)($dataBody['external_id'] ?? $dataBody['transaction_id'] ?? $dataBody['id'] ?? ''));
+        $pixCode = trim((string)($dataBody['pix_code'] ?? $dataBody['pixCode'] ?? $dataBody['qrcode'] ?? $dataBody['qr_code'] ?? $paymentInfo['qrcode'] ?? $paymentInfo['qr_code'] ?? ''));
+        $pixCode = preg_replace('/\s+/', '', $pixCode) ?: '';
+        $provider = strtoupper(trim((string)($dataBody['provider'] ?? '')));
+
+        if ($externalId === '') {
+            throw new DomainException('A AbilityPay respondeu com sucesso, mas não retornou external_id da cobrança.');
+        }
+        if ($provider === 'LOCAL') {
+            throw new DomainException('A AbilityPay está usando o provedor LOCAL (fallback/offline) e não gerou um PIX utilizável. Tente novamente em instantes.');
+        }
+        if ($pixCode === '') {
+            throw new DomainException('A AbilityPay criou a cobrança, mas não retornou o pix_code.');
+        }
+        if (!$this->validPixCode($pixCode)) {
+            throw new DomainException('A AbilityPay retornou um pix_code inválido ou de teste. Tente novamente.');
+        }
 
         return [
             'external_id' => $externalId,
-            'status' => strtoupper((string)($body['status'] ?? 'PENDING')),
+            'status' => strtoupper((string)($dataBody['status'] ?? 'PENDING')),
             'payment_code' => $pixCode,
             'qr_code' => $pixCode,
             'expires_at' => null,
-            'metadata' => ['provider'=>$body['provider']??null,'fee_amount'=>$body['fee_amount']??null,'net_amount'=>$body['net_amount']??null],
+            'metadata' => ['provider'=>$dataBody['provider']??null,'fee_amount'=>$dataBody['fee_amount']??null,'net_amount'=>$dataBody['net_amount']??null],
         ];
     }
 
@@ -143,8 +161,9 @@ final class AbilityPayGateway implements PaymentGateway
 
     private function validPixCode(string $code): bool
     {
-        if ($code === '' || !str_contains($code,'BR.GOV.BCB.PIX')) return false;
-        if (str_ends_with(strtoupper($code),'6304ABCD')) return false;
-        return (bool)preg_match('/6304[0-9A-Fa-f]{4}$/',$code);
+        $normalized = strtoupper(preg_replace('/\s+/', '', trim($code)) ?: '');
+        if ($normalized === '' || !str_contains($normalized, 'BR.GOV.BCB.PIX')) return false;
+        if (str_ends_with($normalized, '6304ABCD')) return false;
+        return (bool)preg_match('/6304[0-9A-F]{4}$/', $normalized);
     }
 }
