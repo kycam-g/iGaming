@@ -1521,3 +1521,26 @@ Execute após atualizar:
 
 ### Banco de dados
 Executar `php bin/migrate.php` para aplicar a migration `035_notification_priority_categories.sql`.
+
+## V24.6 — Notificações automáticas por eventos
+
+### Novidades
+- Notificações automáticas configuráveis no Admin para eventos financeiros e promocionais.
+- Cada automação pode ser ativada/desativada e permite editar categoria, prioridade, título, mensagem e link interno.
+- Variáveis de template disponíveis: `{amount}` e `{count}` conforme o evento.
+- Eventos financeiros automáticos: PIX criado, depósito confirmado, depósito falhou/expirou, bônus de primeiro depósito, saque solicitado, saque em processamento, saque concluído e saque falhou/cancelado.
+- Eventos promocionais automáticos: Giro da Sorte, Roleta de Saque, Sorteio de Cartas, Baú do Tesouro, Rebate, Fundo de Resgate e benefícios VIP disponíveis.
+- Geração idempotente por `source_key`, evitando notificações duplicadas para o mesmo evento.
+- Links automáticos de promoções podem abrir diretamente o módulo correspondente.
+
+### Admin
+Em **Notificações → Notificações automáticas** é possível personalizar cada evento sem alterar código.
+
+### Migration obrigatória
+Execute:
+
+```bash
+php bin/migrate.php
+```
+
+A migration `036_notification_automations.sql` adiciona a chave de origem das notificações automáticas e a tabela de configurações dos eventos.
