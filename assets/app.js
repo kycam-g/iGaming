@@ -135,13 +135,14 @@
     if(favorite){event.preventDefault();event.stopPropagation();toggleFavorite(favorite.dataset.favoriteToggle);renderCatalog();return;}
     const category=event.target.closest('[data-category-filter]');if(category){catalog.category=category.dataset.categoryFilter;renderCatalog();return;}
     const provider=event.target.closest('[data-provider-view]');if(provider){catalog.provider=provider.dataset.providerView||'';catalog.category='ALL';catalog.query='';const search=$('#public-game-search');if(search)search.value='';section('casino');renderCatalog();return;}
-    const game=event.target.closest('[data-game-id]');if(game){const selected=catalog.games.find(item=>Number(item.id)===Number(game.dataset.gameId));if(!selected){toast('Jogo indisponível.');return;}if(String(selected.api_source||'').toUpperCase()==='PLAYFIVER'){launchPlayfiverGame(selected);return;}openGamePage(selected);}
+    const game=event.target.closest('[data-game-id]');if(game){const selected=catalog.games.find(item=>Number(item.id)===Number(game.dataset.gameId));if(!selected){toast('Jogo indisponível.');return;}const source=String(selected.api_source||'').toUpperCase();if(source==='PLAYFIVER'||source==='GAMES2API'){launchApiGame(selected,source);return;}openGamePage(selected);}
   });
-  async function launchPlayfiverGame(game){
+  async function launchApiGame(game,source){
     if(!state.user){openAuth('login');toast('Entre na sua conta para abrir o jogo.');return;}
     toast('Abrindo '+game.name+'...');
     try{
-      const result=await api('/api/casino/playfiver/launch',{method:'POST',body:JSON.stringify({game_id:Number(game.id)})});
+      const endpoint=source==='GAMES2API'?'/api/casino/games2api/launch':'/api/casino/playfiver/launch';
+      const result=await api(endpoint,{method:'POST',body:JSON.stringify({game_id:Number(game.id)})});
       const target=new URL(String(result.launch_url||''));
       if(target.protocol!=='https:')throw new Error('URL de lançamento inválida.');
       window.location.assign(target.href);

@@ -22,6 +22,9 @@ use App\Modules\Auth\AuthService;
 use App\Modules\Casino\CasinoCatalogService;
 use App\Modules\Casino\PlayfiverConfigService;
 use App\Modules\Casino\PlayfiverGameService;
+use App\Modules\Casino\Games2ApiConfigService;
+use App\Modules\Casino\Games2ApiGameService;
+use App\Modules\Casino\Games2ApiCatalogSyncService;
 use App\Modules\Payments\GatewayConfigRepository;
 use App\Modules\Payments\GatewayRegistry;
 use App\Modules\Payments\PaymentService;
@@ -59,6 +62,9 @@ $analytics = new AnalyticsService();
 $casino = new CasinoCatalogService();
 $playfiverConfig = new PlayfiverConfigService(new SecretBox());
 $playfiverGames = new PlayfiverGameService($playfiverConfig, $wallet, $users);
+$games2ApiConfig = new Games2ApiConfigService(new SecretBox());
+$games2ApiGames = new Games2ApiGameService($games2ApiConfig, $wallet, $users);
+$games2ApiSync = new Games2ApiCatalogSyncService($games2ApiConfig);
 $platform = new PlatformService();
 $promotionConfigs = new PromotionConfigService();
 $promotionRedemptions = new PromotionRedemptionService();
@@ -198,10 +204,18 @@ $router->get('/api/wallet/transactions', function (Request $request) use ($auth,
 
 $router->get('/admin/api/casino/playfiver', function (Request $request) use ($adminAuth,$playfiverConfig) { if (!$adminAuth->authenticate($request->bearerToken())) Response::json(['error'=>'unauthorized'],401); return ['config'=>$playfiverConfig->publicConfig()]; });
 $router->post('/admin/api/casino/playfiver', function (Request $request) use ($adminAuth,$playfiverConfig,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$playfiverConfig->save($request->body); $audit->record('ADMIN',(string)$admin['id'],'casino.playfiver_credentials_saved','casino_api_credentials','playfiver',$request->clientIp(),['configured'=>$result['configured'],'enabled'=>(bool)$result['enabled']]); return ['config'=>$result]; });
+$router->get('/admin/api/casino/games2api', function (Request $request) use ($adminAuth,$games2ApiConfig) { if (!$adminAuth->authenticate($request->bearerToken())) Response::json(['error'=>'unauthorized'],401); return ['config'=>$games2ApiConfig->publicConfig()]; });
+$router->post('/admin/api/casino/games2api', function (Request $request) use ($adminAuth,$games2ApiConfig,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$games2ApiConfig->save($request->body); $audit->record('ADMIN',(string)$admin['id'],'casino.games2api_credentials_saved','casino_api_credentials','games2api',$request->clientIp(),['configured'=>$result['configured'],'enabled'=>(bool)$result['enabled']]); return ['config'=>$result]; });
+$router->post('/admin/api/casino/games2api/sync', function (Request $request) use ($adminAuth,$games2ApiSync,$audit) { $admin=$adminAuth->authenticate($request->bearerToken()); if (!$admin) Response::json(['error'=>'unauthorized'],401); $result=$games2ApiSync->sync(); $audit->record('ADMIN',(string)$admin['id'],'casino.games2api_catalog_synced','casino_games','games2api',$request->clientIp(),$result); return $result; });
 $router->post('/api/casino/playfiver/launch', function (Request $request) use ($auth,$playfiverGames) {
     $user=$auth->authenticate($request->bearerToken());
     if(!$user) Response::json(['error'=>'unauthorized'],401);
     return $playfiverGames->launch($user,(int)($request->body['game_id']??0));
+});
+$router->post('/api/casino/games2api/launch', function (Request $request) use ($auth,$games2ApiGames) {
+    $user=$auth->authenticate($request->bearerToken());
+    if(!$user) Response::json(['error'=>'unauthorized'],401);
+    return $games2ApiGames->launch($user,(int)($request->body['game_id']??0));
 });
 $playfiverCallback = function (Request $request) use ($playfiverGames) {
     try {
@@ -214,6 +228,12 @@ $playfiverCallback = function (Request $request) use ($playfiverGames) {
 };
 $router->post('/api/webhooks/casino/playfiver', $playfiverCallback);
 $router->post('/playfiver/webhook', $playfiverCallback);
+$games2ApiCallback = function (Request $request) use ($games2ApiGames) {
+    try { return $games2ApiGames->handleCallback($request->body); }
+    catch (DomainException $error) { Response::json(['status'=>0,'msg'=>$error->getMessage()],422); }
+};
+$router->post('/api/webhooks/casino/games2api', $games2ApiCallback);
+$router->post('/games2api/webhook', $games2ApiCallback);
 $router->get('/api/casino/providers', fn() => ['providers'=>$casino->publicProviders()]);
 $router->get('/api/casino/categories', fn() => ['categories'=>$casino->categories(true)]);
 $router->get('/api/casino/games', fn() => ['games'=>$casino->games(true)]);
@@ -234,6 +254,9 @@ $router->post('/api/webhooks/payments/pixup', fn(Request $request) => $payments-
 $abilityPayCallback = fn(Request $request) => $payments->processWebhook('abilitypay',$request->rawBody,$request->headers,$request->body);
 $router->post('/api/webhooks/payments/abilitypay', $abilityPayCallback);
 $router->post('/api/abilitypay/callback', $abilityPayCallback);
+$bspayCallback = fn(Request $request) => $payments->processWebhook('bspay',$request->rawBody,$request->headers,$request->body);
+$router->post('/api/webhooks/payments/bspay', $bspayCallback);
+$router->post('/api/bspay/callback', $bspayCallback);
 
 $router->post('/admin/api/login', fn(Request $request) => $adminAuth->login((string)($request->body['email']??''),(string)($request->body['password']??'')));
 $router->get('/admin/api/me', function (Request $request) use ($adminAuth) { $admin=$adminAuth->authenticate($request->bearerToken()); if(!$admin)Response::json(['error'=>'unauthorized'],401); return ['admin'=>$admin]; });

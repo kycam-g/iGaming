@@ -8,6 +8,7 @@ use App\Core\Database\Database;
 use App\Core\Support\Env;
 use App\Integrations\Payments\Pixup\PixupGateway;
 use App\Integrations\Payments\AbilityPay\AbilityPayGateway;
+use App\Integrations\Payments\Bspay\BspayGateway;
 use App\Modules\Wallet\WalletService;
 use DomainException;
 use PDO;
@@ -79,7 +80,13 @@ final class PaymentService
         try {
             $gateway = $this->gateways->resolve($config);
             $payer = $this->payer($userId);
-            $postback = (string) (($config['settings']['webhook_url'] ?? '') ?: rtrim((string) Env::get('APP_URL', ''), '/') . '/api/webhooks/payments/' . $config['code']);
+            $postback = trim((string)($config['settings']['webhook_url'] ?? ''));
+            if ((string)$config['code'] !== 'bspay' && $postback === '') {
+                $postback = rtrim((string) Env::get('APP_URL', ''), '/') . '/api/webhooks/payments/' . $config['code'];
+            }
+            // BSPAY: postback_url is optional. When blank, the provider uses the
+            // default postback configured on the BSPAY credential. Do not build
+            // a URL from APP_URL automatically because local/non-public hosts are rejected.
             $created = $gateway->createDeposit([
                 'payment_id'=>$paymentId,
                 'user_id'=>$userId,
@@ -132,6 +139,7 @@ final class PaymentService
         if(empty($config['enabled'])) throw new DomainException('Gateway desabilitado.');
         $gateway=$this->gateways->resolve($config);
         if($gateway instanceof AbilityPayGateway) return $this->processAbilityPayWebhook($gatewayCode,$gateway,$rawBody,$headers,$payload);
+        if($gateway instanceof BspayGateway) return $this->processBspayWebhook($gatewayCode,$gateway,$rawBody,$headers,$payload);
         if($gateway instanceof PixupGateway) $gateway->validateWebhook($rawBody,$headers);
 
         $data=is_array($payload['data']??null)?$payload['data']:$payload;
@@ -168,6 +176,85 @@ final class PaymentService
         return ['received'=>true,'matched'=>true,'payment_id'=>$payment['id']];
     }
 
+
+    private function processBspayWebhook(string $gatewayCode, BspayGateway $gateway, string $rawBody, array $headers, array $payload): array
+    {
+        $gateway->validateWebhook($rawBody,$headers);
+        $data=is_array($payload['data']??null)?$payload['data']:$payload;
+        $event=strtolower(trim((string)($payload['event']??$this->header($headers,'X-Webhook-Event')??'unknown')));
+        $remoteId=trim((string)($payload['transaction_id']??$data['transaction_id']??''));
+        $localPaymentId=trim((string)($data['external_id']??$payload['external_id']??''));
+        $eventKey=trim((string)($this->header($headers,'X-Webhook-Id')??''));
+        if($eventKey==='') $eventKey=hash('sha256',$gatewayCode.'|'.$event.'|'.$remoteId.'|'.$rawBody);
+
+        $inserted=false;
+        try {
+            $stmt=Database::connection()->prepare('INSERT INTO payment_webhook_events (gateway_code,event_key,external_id,event_type,payload) VALUES (:gateway,:event_key,:external_id,:event_type,:payload)');
+            $stmt->execute(['gateway'=>$gatewayCode,'event_key'=>$eventKey,'external_id'=>$remoteId?:null,'event_type'=>$event,'payload'=>json_encode($payload,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES)]);
+            $inserted=true;
+        } catch (PDOException $e) {
+            if((string)$e->getCode()!=='23000') throw $e;
+        }
+        if(!$inserted) return ['received'=>true,'duplicate'=>true];
+
+        $payment=$this->findWebhookPayment($gatewayCode,$localPaymentId,$remoteId);
+        if(!$payment){$this->markWebhookProcessed($gatewayCode,$eventKey);return ['received'=>true,'matched'=>false];}
+
+        // Não usamos segredo de webhook da BSPAY. Antes de qualquer efeito financeiro,
+        // confirmamos a transação diretamente na API autenticada do gateway.
+        $lookupId=$remoteId!==''?$remoteId:($localPaymentId!==''?$localPaymentId:(string)$payment['external_id']);
+        $remote=$gateway->getTransaction($lookupId);
+        $remoteStatus=strtolower(trim((string)($remote['status']??'')));
+        $remoteType=strtolower(trim((string)($remote['type']??'')));
+        $expectedType=(string)$payment['kind']==='DEPOSIT'?'cashin':'cashout';
+        if($remoteType!=='' && $remoteType!==$expectedType) throw new DomainException('Tipo da transação BSPAY não confere com a operação local.');
+        $remoteAmount=$remote['amount']??null;
+        if($remoteAmount!==null && abs(((float)$remoteAmount*100)-(int)$payment['amount_minor'])>1) throw new DomainException('Valor da transação BSPAY não confere com a operação local.');
+
+        $allowedStatuses=[
+            'cashin.confirmed'=>['confirmed','paid'],
+            'cashin.expired'=>['expired'],
+            'cashin.refunded'=>['refunded'],
+            'cashout.confirmed'=>['confirmed','paid'],
+            'cashout.failed'=>['failed','cancelled','canceled'],
+            'cashout.refunded'=>['refunded'],
+        ];
+        if(isset($allowedStatuses[$event]) && !in_array($remoteStatus,$allowedStatuses[$event],true)) {
+            throw new DomainException('Status da transação BSPAY ainda não confirma o evento recebido.');
+        }
+
+        if($event==='cashin.confirmed') {
+            if((string)$payment['kind']!=='DEPOSIT') throw new DomainException('Evento BSPAY de depósito associado a transação incompatível.');
+            $this->creditDepositOnce($payment);
+        } elseif($event==='cashin.expired') {
+            if((string)$payment['kind']==='DEPOSIT') Database::connection()->prepare("UPDATE payment_transactions SET status='EXPIRED' WHERE id=:id AND status IN ('PENDING','PROCESSING')")->execute(['id'=>$payment['id']]);
+        } elseif($event==='cashin.refunded') {
+            if((string)$payment['kind']==='DEPOSIT') Database::connection()->prepare("UPDATE payment_transactions SET status='REVIEW' WHERE id=:id")->execute(['id'=>$payment['id']]);
+        } elseif($event==='cashout.confirmed') {
+            $this->settleBspayWithdrawal($payment,'PAID',$event,(array)($remote['metadata']??$data),false);
+        } elseif($event==='cashout.failed') {
+            $this->settleBspayWithdrawal($payment,'FAILED',$event,(array)($remote['metadata']??$data),true);
+        } elseif($event==='cashout.refunded') {
+            $this->settleBspayWithdrawal($payment,'FAILED',$event,(array)($remote['metadata']??$data),true);
+        }
+        $this->markWebhookProcessed($gatewayCode,$eventKey);
+        return ['received'=>true,'matched'=>true,'payment_id'=>$payment['id']];
+    }
+
+    private function settleBspayWithdrawal(array $payment,string $status,string $event,array $remote,bool $refundUser): void
+    {
+        if((string)$payment['kind']!=='WITHDRAWAL') throw new DomainException('Evento BSPAY de saque associado a transação incompatível.');
+        Database::transaction(function(PDO $pdo) use($payment,$status,$event,$remote,$refundUser): void {
+            $stmt=$pdo->prepare("SELECT * FROM payment_transactions WHERE id=:id AND kind='WITHDRAWAL' FOR UPDATE");
+            $stmt->execute(['id'=>$payment['id']]);$row=$stmt->fetch();if(!$row)throw new DomainException('Saque não encontrado.');
+            if($refundUser){
+                $this->wallet->credit((string)$row['user_id'],'CASH',(int)$row['amount_minor'],'PAYMENT_WITHDRAWAL',(string)$row['id'],'withdrawal-gateway-refund:'.(string)$row['id'],'WITHDRAWAL_GATEWAY_REFUND',$pdo);
+            } elseif((string)$row['status']==='PAID') { return; }
+            $meta=json_decode((string)($row['metadata']??'{}'),true)?:[];
+            $meta['gateway_confirmation']=['event'=>$event,'remote_status'=>$remote['status']??null,'transaction_id'=>$remote['transaction_id']??null,'at'=>gmdate('c')];
+            $pdo->prepare('UPDATE payment_transactions SET status=:status,metadata=:metadata,updated_at=NOW() WHERE id=:id')->execute(['status'=>$status,'metadata'=>json_encode($meta,JSON_UNESCAPED_UNICODE|JSON_UNESCAPED_SLASHES),'id'=>$row['id']]);
+        });
+    }
     private function processAbilityPayWebhook(string $gatewayCode, AbilityPayGateway $gateway, string $rawBody, array $headers, array $payload): array
     {
         $data=is_array($payload['data']??null)?$payload['data']:$payload;

@@ -86,12 +86,23 @@ final class PlayfiverConfigService
 
         $enabled = !empty($data['enabled']) ? 1 : 0;
         $encrypted = $this->box->encrypt($secrets);
-        $stmt = $pdo->prepare(
-            'INSERT INTO casino_api_credentials (integration_code,base_url,credentials_encrypted,enabled) '
-            . 'VALUES (:code,:url,:secret,:enabled) '
-            . 'ON DUPLICATE KEY UPDATE base_url=VALUES(base_url),credentials_encrypted=VALUES(credentials_encrypted),enabled=VALUES(enabled)'
-        );
-        $stmt->execute(['code'=>'playfiver','url'=>$url,'secret'=>$encrypted,'enabled'=>$enabled]);
+        $pdo->beginTransaction();
+        try {
+            if ($enabled) {
+                // Somente uma API de jogos pode estar ativa por vez; as demais credenciais são preservadas.
+                $pdo->prepare("UPDATE casino_api_credentials SET enabled=0 WHERE integration_code<>'playfiver' AND integration_code IN ('playfiver','games2api')")->execute();
+            }
+            $stmt = $pdo->prepare(
+                'INSERT INTO casino_api_credentials (integration_code,base_url,credentials_encrypted,enabled) '
+                . 'VALUES (:code,:url,:secret,:enabled) '
+                . 'ON DUPLICATE KEY UPDATE base_url=VALUES(base_url),credentials_encrypted=VALUES(credentials_encrypted),enabled=VALUES(enabled)'
+            );
+            $stmt->execute(['code'=>'playfiver','url'=>$url,'secret'=>$encrypted,'enabled'=>$enabled]);
+            $pdo->commit();
+        } catch (\Throwable $error) {
+            if ($pdo->inTransaction()) $pdo->rollBack();
+            throw $error;
+        }
 
         return $this->publicConfig();
     }

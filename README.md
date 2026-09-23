@@ -1597,3 +1597,78 @@ A migration `037_support_tickets.sql` cria as tabelas de tickets e mensagens.
 2. Em **Admin → Gateways → AbilityPay**, informe Client ID e Client Secret e ative depósito e/ou saque.
 3. No painel AbilityPay, configure a Callback HTTPS como `https://SEU_DOMINIO/api/abilitypay/callback`.
 4. Faça homologação de depósito e saque antes de ativar em produção.
+
+
+## V24.9 — Integração Games2API
+
+- Nova integração de jogos `Games2API`, mantendo PlayFiver e catálogo manual existentes.
+- Regra de exclusividade: somente **uma API de jogos** (`PlayFiver` ou `Games2API`) pode ficar ativa por vez. Ao ativar uma, a outra é desativada sem apagar credenciais ou catálogo.
+- Credenciais Games2API criptografadas: Agent Code, Agent Token e Agent Secret.
+- URL oficial configurada e restrita a `https://api.games2api.xyz`.
+- Lançamento de jogo via `method=game_launch`.
+- Callback Seamless em `POST /api/webhooks/casino/games2api`, com validação obrigatória de Agent Code + Agent Secret.
+- Callback de saldo (`method=user_balance`) e transação (`method=transaction`) integrados ao wallet/ledger idempotente.
+- Sincronização administrativa de provedores (`provider_list`) e jogos (`game_list`) pelo botão **Sincronizar catálogo**.
+- Catálogos de PlayFiver e Games2API podem coexistir no banco; no site público aparecem jogos manuais + jogos da API atualmente ativa.
+- Admin → Jogos → Credenciais das APIs mostra PlayFiver e Games2API separadamente.
+- Admin → Catálogo de jogos identifica a origem de cada jogo.
+
+### Migration obrigatória
+Execute após atualizar:
+
+```bash
+php bin/migrate.php
+```
+
+A migration `039_games2api_multi_catalog.sql` altera a chave única do catálogo para permitir o mesmo `provider/game_code` em integrações diferentes sem sobrescrever o catálogo anterior.
+
+### Callback Games2API
+Cadastre no painel da Games2API a URL HTTPS:
+
+```text
+https://SEU_DOMINIO/api/webhooks/casino/games2api
+```
+
+Antes de produção, homologue `provider_list`, `game_list`, `game_launch`, saldo e transações com as credenciais reais do agente.
+
+## V24.10 — Gateway BSPAY
+
+- Novo gateway `bspay`, mantendo Pixup e AbilityPay existentes.
+- Configuração em **Admin → Gateways → BSPAY** com Client ID, Client Secret, Signing Key e URL base.
+- Autenticação OAuth2 Client Credentials em `POST /v2/oauth/token`.
+- Depósitos PIX via `POST /v2/transactions/cashin`, usando o ID local como `external_id` idempotente e recebendo o BR Code em `data.payment_info.qrcode`.
+- Saques PIX via `POST /v2/transactions/cashout` com Bearer Token + assinatura HMAC SHA-256 (`X-Signature`, `X-Timestamp`, `X-Nonce`).
+- Webhook BSPAY reconciliado com a API autenticada antes de qualquer crédito, conclusão de saque ou estorno; não há campo Webhook Secret no Admin.
+- Eventos tratados: `cashin.confirmed`, `cashin.expired`, `cashin.refunded`, `cashout.confirmed`, `cashout.failed` e `cashout.refunded`.
+- Proteção de idempotência para webhooks e para estorno de saque ao jogador.
+- Callback público: `POST /api/bspay/callback` e alias `POST /api/webhooks/payments/bspay`.
+- O gateway nasce desativado, preservando todos os gateways já existentes.
+- Migration nova: `database/migrations/040_bspay_gateway.sql`.
+
+### Configuração BSPAY
+
+1. Execute `php bin/migrate.php`.
+2. Em **Admin → Gateways → BSPAY**, informe Client ID e Client Secret.
+3. Para saques, informe também a Signing Key gerada no painel BSPAY.
+4. Cadastre o callback HTTPS `https://SEU_DOMINIO/api/bspay/callback` no painel BSPAY.
+5. Homologue depósito, confirmação por webhook, saque, falha e estorno antes de habilitar em produção.
+
+
+## V24.10.1 — Correção BSPAY
+
+- Removido o campo **Webhook Secret** da configuração BSPAY.
+- Client ID e Client Secret continuam responsáveis pelo OAuth2; Signing Key permanece exclusiva para assinatura HMAC dos saques.
+- Callbacks BSPAY agora são tratados como gatilho: antes de qualquer efeito financeiro, a transação é consultada novamente na API autenticada da BSPAY e são conferidos tipo, valor e status.
+- Credencial antiga `webhook_secret`, se existir de uma instalação V24.10, é removida ao salvar novamente a configuração BSPAY.
+- Nenhuma migration adicional é necessária.
+
+
+## V24.10.2 — Correção BSPAY postback_url
+
+- Corrigido erro `INVALID_POSTBACK_URL` na criação de depósitos BSPAY.
+- A BSPAY documenta `postback_url` como opcional: quando omitido, utiliza o postback padrão configurado na credencial.
+- A plataforma não monta mais automaticamente o postback BSPAY a partir de `APP_URL`, evitando envio de hosts locais, HTTP ou não resolvíveis.
+- Em **Admin → Gateways → BSPAY** foi adicionado `Postback URL BSPAY (opcional)`.
+- Quando preenchido, o endereço precisa ser HTTPS público; quando vazio, o campo não é enviado à API.
+- O callback recomendado permanece `https://SEU_DOMINIO/api/bspay/callback`.
+- Nenhuma migration nova nesta correção.

@@ -242,7 +242,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-7"></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-9"></script>
 <script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-7" defer></script>
 <script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24-1" defer></script>
 </body>

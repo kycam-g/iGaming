@@ -20,8 +20,10 @@ final class CasinoCatalogService
     public function publicProviders(): array
     {
         $pdo=Database::connection();
-        try { return $pdo->query("SELECT id,code,name,logo_path FROM casino_providers WHERE enabled=1 ORDER BY name ASC,id ASC")->fetchAll(); }
-        catch (\Throwable) { return $pdo->query("SELECT id,code,name,'' AS logo_path FROM casino_providers WHERE enabled=1 ORDER BY name ASC,id ASC")->fetchAll(); }
+        $active=$this->activeApiSource();
+        $apiFilter=$active!==null ? " AND EXISTS (SELECT 1 FROM casino_games g WHERE g.provider_id=casino_providers.id AND g.enabled=1 AND (g.api_source='MANUAL' OR g.api_source=".$pdo->quote($active)."))" : " AND EXISTS (SELECT 1 FROM casino_games g WHERE g.provider_id=casino_providers.id AND g.enabled=1 AND g.api_source='MANUAL')";
+        try { return $pdo->query("SELECT id,code,name,logo_path FROM casino_providers WHERE enabled=1".$apiFilter." ORDER BY name ASC,id ASC")->fetchAll(); }
+        catch (\Throwable) { return $pdo->query("SELECT id,code,name,'' AS logo_path FROM casino_providers WHERE enabled=1".$apiFilter." ORDER BY name ASC,id ASC")->fetchAll(); }
     }
 
     public function categories(bool $public = false): array
@@ -76,7 +78,12 @@ final class CasinoCatalogService
     public function games(bool $public = false): array
     {
         $pdo=Database::connection();
-        $where=$public ? " WHERE g.enabled=1 AND p.enabled=1" : '';
+        $where='';
+        if($public){
+            $active=$this->activeApiSource();
+            $apiFilter=$active!==null ? " AND (g.api_source='MANUAL' OR g.api_source=".$pdo->quote($active).")" : " AND g.api_source='MANUAL'";
+            $where=" WHERE g.enabled=1 AND p.enabled=1".$apiFilter;
+        }
         $order=' ORDER BY g.featured DESC,g.sort_order ASC,g.id DESC';
         $accessSelect=$this->gameAccessColumnExists() ? 'g.access_count' : '0 AS access_count';
         $providerLogoSelect=$this->providerLogoColumnExists() ? 'p.logo_path AS provider_logo' : "'' AS provider_logo";
@@ -91,7 +98,7 @@ final class CasinoCatalogService
         $name = trim((string)($data['name'] ?? ''));
         $mode = (string)($data['mode'] ?? 'DEMO');
         $apiSource = strtoupper(trim((string)($data['api_source'] ?? 'MANUAL')));
-        if (!preg_match('/^[a-z0-9_-]{2,60}$/', $code) || mb_strlen($name)>120 || $name==='' || !in_array($mode,['DEMO','PRODUCTION'],true) || !in_array($apiSource,['MANUAL','PLAYFIVER'],true)) throw new DomainException('Dados do provedor inválidos.');
+        if (!preg_match('/^[a-z0-9_-]{2,60}$/', $code) || mb_strlen($name)>120 || $name==='' || !in_array($mode,['DEMO','PRODUCTION'],true) || !in_array($apiSource,['MANUAL','PLAYFIVER','GAMES2API'],true)) throw new DomainException('Dados do provedor inválidos.');
         $id = (int)($data['id'] ?? 0);
         $logo=trim((string)($data['logo_path']??''));
         if($logo!=='' && !preg_match('~^/uploads/providers/[a-f0-9]{32}\.(?:jpg|png|webp)$~i',$logo)) throw new DomainException('Logo inválida. Envie pelo painel.');
@@ -108,6 +115,15 @@ final class CasinoCatalogService
             $stmt=$pdo->prepare($sql);$args=['code'=>$code,'name'=>$name,'enabled'=>!empty($data['enabled'])?1:0,'mode'=>$mode,'api_source'=>$apiSource];if($hasLogo)$args['logo_path']=$logo?:null;$stmt->execute($args);$id=(int)$pdo->lastInsertId();
         }
         $select=$hasLogo?'SELECT id,code,name,logo_path,enabled,mode,api_source FROM casino_providers WHERE id=:id':"SELECT id,code,name,'' AS logo_path,enabled,mode,api_source FROM casino_providers WHERE id=:id";$stmt=$pdo->prepare($select);$stmt->execute(['id'=>$id]);return $stmt->fetch();
+    }
+
+    private function activeApiSource(): ?string
+    {
+        try {
+            $stmt=Database::connection()->query("SELECT integration_code FROM casino_api_credentials WHERE enabled=1 AND integration_code IN ('playfiver','games2api') ORDER BY updated_at DESC,id DESC LIMIT 1");
+            $code=strtolower((string)$stmt->fetchColumn());
+            return match($code){'playfiver'=>'PLAYFIVER','games2api'=>'GAMES2API',default=>null};
+        } catch (\Throwable) { return null; }
     }
 
     private function providerLogoColumnExists(): bool
