@@ -1544,3 +1544,36 @@ php bin/migrate.php
 ```
 
 A migration `036_notification_automations.sql` adiciona a chave de origem das notificações automáticas e a tabela de configurações dos eventos.
+
+## V24.7 — Suporte/Tickets + submenus de Notificações
+
+### Notificações no Admin
+- `Notificações` agora é um menu expansível, no mesmo padrão de Jogos e Promoções.
+- Submenus:
+  - Central de Notificações;
+  - Mensagens manuais;
+  - Notificações automáticas.
+- A Central mostra resumo de mensagens publicadas, automações ativas e itens de alta prioridade.
+
+### Central de Suporte
+- Novo menu `Suporte` no Admin, mantendo Dashboard como primeiro item e a sequência principal em ordem alfabética.
+- Jogador pode abrir tickets nas categorias Depósito, Saque, Bônus, Conta, Jogos e Outros.
+- Status: Aberto, Em atendimento, Resolvido e Fechado.
+- Prioridade: Normal, Alta e Urgente.
+- Histórico completo de conversa.
+- Respostas do Admin geram notificação automática na categoria `Suporte` para o jogador.
+- Observações internas do Admin não aparecem ao jogador.
+- Busca por ticket, usuário, e-mail ou ID público.
+- Filtros por status e categoria.
+- Indicador de SLA em horas para tickets pendentes.
+- Anexos de imagem PNG/JPG/WebP até 5 MB para jogador e Admin.
+- Acesso público em `/suporte` e pelo menu lateral em `Sua conta → Suporte`.
+
+### Banco de dados
+Execute após atualizar:
+
+```bash
+php bin/migrate.php
+```
+
+A migration `037_support_tickets.sql` cria as tabelas de tickets e mensagens.

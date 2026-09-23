@@ -40,6 +40,7 @@ use App\Modules\Platform\RedEnvelopeService;
 use App\Modules\Platform\CashWheelService;
 use App\Modules\Platform\LotteryService;
 use App\Modules\Platform\NotificationService;
+use App\Modules\Platform\SupportService;
 
 Env::load(dirname(__DIR__) . '/.env');
 $router = new Router();
@@ -71,6 +72,7 @@ $redEnvelope = new RedEnvelopeService();
 $cashWheel = new CashWheelService();
 $lottery = new LotteryService();
 $notifications = new NotificationService();
+$support = new SupportService();
 
 $router->get('/health', fn() => ['status' => 'ok', 'service' => 'igaming-php']);
 
@@ -90,6 +92,7 @@ $router->get('/', $frontend);
 $router->get('/cassino', $frontend);
 $router->get('/promocoes', $frontend);
 $router->get('/carteira', $frontend);
+$router->get('/suporte', $frontend);
 $router->get('/admin', $adminFrontend);
 $router->get('/api/platform/public', fn() => ['settings'=>array_intersect_key($platform->settings(),array_flip(['site_name','accent_color','footer_text','footer_about','support_email','contact_phone','social_whatsapp','social_telegram','social_instagram','social_facebook','logo_path','favicon_path','deposit_presets','first_deposit_bonus_enabled','first_deposit_bonus_min_brl','first_deposit_bonus_percent','first_deposit_bonus_max_brl'])),'banners'=>$platform->list('banners',true),'promotions'=>$platform->list('promotions',true),'announcements'=>$platform->announcements(true),'floating_icons'=>$platform->floatingIcons(true)]);
 $router->get('/admin/api/platform', function(Request $request) use($adminAuth,$platform){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['settings'=>$platform->settings(),'banners'=>$platform->list('banners'),'promotions'=>$platform->list('promotions'),'affiliates'=>$platform->affiliateReport(),'announcements'=>$platform->announcements(),'floating_icons'=>$platform->floatingIcons(false)];});
@@ -112,6 +115,18 @@ $router->post('/admin/api/notifications/save',function(Request $request)use($adm
 $router->post('/admin/api/notifications/delete',function(Request $request)use($adminAuth,$notifications,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$id=(int)($request->body['id']??0);$notifications->delete($id);$audit->record('ADMIN',(string)$admin['id'],'platform.notification_deleted','platform_notifications',(string)$id,$request->clientIp());return ['ok'=>true];});
 $router->get('/admin/api/notification-automations',function(Request $request)use($adminAuth,$notifications){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$notifications->automationSettings()];});
 $router->post('/admin/api/notification-automations/save',function(Request $request)use($adminAuth,$notifications,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$result=$notifications->saveAutomationSetting($request->body);$audit->record('ADMIN',(string)$admin['id'],'platform.notification_automation_updated','notification_automation_settings',(string)($result['event_key']??''),$request->clientIp(),['enabled'=>(bool)($result['enabled']??false)]);return $result;});
+
+$router->get('/api/support/tickets',function(Request $request)use($auth,$support){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return ['items'=>$support->userList((string)$user['id'])];});
+$router->get('/api/support/ticket',function(Request $request)use($auth,$support){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $support->userTicket((string)$user['id'],(int)($request->query['id']??0));});
+$router->post('/api/support/tickets/create',function(Request $request)use($auth,$support,$audit){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);$ticket=$support->userCreate((string)$user['id'],$request->body);$audit->record('USER',(string)$user['id'],'support.ticket_created','support_ticket',(string)$ticket['id'],$request->clientIp());return $ticket;});
+$router->post('/api/support/tickets/reply',function(Request $request)use($auth,$support,$audit){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);$ticket=$support->userReply((string)$user['id'],(int)($request->body['ticket_id']??0),$request->body);$audit->record('USER',(string)$user['id'],'support.ticket_replied','support_ticket',(string)$ticket['id'],$request->clientIp());return $ticket;});
+$router->post('/api/support/upload',function(Request $request)use($auth){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);$file=$_FILES['image']??null;if(!$file||$file['error']!==UPLOAD_ERR_OK||$file['size']>5242880)Response::json(['error'=>'invalid_file'],422);$mime=(new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);$ext=match($mime){'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp',default=>null};if(!$ext||!getimagesize($file['tmp_name']))Response::json(['error'=>'invalid_image'],422);$dir=__DIR__.'/uploads/support';if(!is_dir($dir)&&!mkdir($dir,0755,true)&&!is_dir($dir))Response::json(['error'=>'upload_failed'],500);$name=bin2hex(random_bytes(16)).'.'.$ext;if(!move_uploaded_file($file['tmp_name'],$dir.'/'.$name))Response::json(['error'=>'upload_failed'],500);return ['path'=>'/uploads/support/'.$name];});
+$router->post('/admin/api/support/upload',function(Request $request)use($adminAuth){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);$file=$_FILES['image']??null;if(!$file||$file['error']!==UPLOAD_ERR_OK||$file['size']>5242880)Response::json(['error'=>'invalid_file'],422);$mime=(new finfo(FILEINFO_MIME_TYPE))->file($file['tmp_name']);$ext=match($mime){'image/jpeg'=>'jpg','image/png'=>'png','image/webp'=>'webp',default=>null};if(!$ext||!getimagesize($file['tmp_name']))Response::json(['error'=>'invalid_image'],422);$dir=__DIR__.'/uploads/support';if(!is_dir($dir)&&!mkdir($dir,0755,true)&&!is_dir($dir))Response::json(['error'=>'upload_failed'],500);$name=bin2hex(random_bytes(16)).'.'.$ext;if(!move_uploaded_file($file['tmp_name'],$dir.'/'.$name))Response::json(['error'=>'upload_failed'],500);return ['path'=>'/uploads/support/'.$name];});
+$router->get('/admin/api/support/tickets',function(Request $request)use($adminAuth,$support){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return ['items'=>$support->adminList($request->query)];});
+$router->get('/admin/api/support/ticket',function(Request $request)use($adminAuth,$support){if(!$adminAuth->authenticate($request->bearerToken()))Response::json(['error'=>'unauthorized'],401);return $support->adminTicket((int)($request->query['id']??0));});
+$router->post('/admin/api/support/reply',function(Request $request)use($adminAuth,$support,$notifications,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$ticket=$support->adminReply((string)$admin['id'],(int)($request->body['ticket_id']??0),$request->body,$notifications);$audit->record('ADMIN',(string)$admin['id'],'support.ticket_replied','support_ticket',(string)$ticket['id'],$request->clientIp(),['internal'=>filter_var($request->body['internal']??false,FILTER_VALIDATE_BOOLEAN)]);return $ticket;});
+$router->post('/admin/api/support/update',function(Request $request)use($adminAuth,$support,$audit){$admin=$adminAuth->authenticate($request->bearerToken());if(!$admin)Response::json(['error'=>'unauthorized'],401);$ticket=$support->adminUpdate((string)$admin['id'],(int)($request->body['ticket_id']??0),$request->body);$audit->record('ADMIN',(string)$admin['id'],'support.ticket_updated','support_ticket',(string)$ticket['id'],$request->clientIp(),['status'=>$ticket['status'],'priority'=>$ticket['priority']]);return $ticket;});
+
 // Configuração administrativa isolada dos fluxos de carteira / pagamentos.
 $router->get('/api/promotions/configs',fn() => ['items'=>$promotionConfigs->publicList()]);
 $router->get('/api/promotions/roulette/status',function(Request $request)use($auth,$welcomeRoulette){$user=$auth->authenticate($request->bearerToken());if(!$user)Response::json(['error'=>'unauthorized'],401);return $welcomeRoulette->status((string)$user['id']);});

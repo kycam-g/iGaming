@@ -74,6 +74,14 @@ final class NotificationService
         if($id<1)throw new DomainException('Notificação inválida.');$stmt=$this->db()->prepare('DELETE FROM platform_notifications WHERE id=?');$stmt->execute([$id]);
     }
 
+    public function sendUser(string $userId,string $category,string $title,string $message,string $linkPath='',string $priority='normal',?string $sourceKey=null):void
+    {
+        if(!in_array($category,self::CATEGORIES,true))throw new DomainException('Categoria inválida.');if(!in_array($priority,self::PRIORITIES,true))$priority='normal';
+        $link=trim($linkPath);if($link!==''&&!preg_match('~^/(?:$|[a-z0-9/_?&=.-]+$)~i',$link))$link='';
+        $stmt=$this->db()->prepare("INSERT IGNORE INTO platform_notifications(category,priority,audience,user_id,source_key,title,message,link_path,enabled,starts_at) VALUES(?,?,'USER',?,?,?,?,?,1,NOW(6))");
+        $stmt->execute([$category,$priority,$userId,$sourceKey,$title,$message,$link===''?null:$link]);
+    }
+
 
     public function automationSettings():array
     {

@@ -18,7 +18,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
   <link rel="icon" id="browser-favicon" href="data:,">
   <title><?= h($siteName) ?></title>
   <meta name="description" content="Plataforma iGaming modular em PHP puro.">
-  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24-6">
+  <link rel="stylesheet" href="<?= h($basePath) ?>/assets/app.css?v=20260923-v24-7">
 </head>
 <body>
 <div class="mobile-stage">
@@ -45,6 +45,7 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
         <button type="button" data-drawer-promo="agency">♧ &nbsp; Convidar amigos</button>
         <button type="button" data-drawer-deposit="1">▣ &nbsp; Depósito</button>
         <button type="button" data-drawer-section="profile">↗ &nbsp; Saque / carteira</button>
+        <button type="button" data-drawer-section="support">☏ &nbsp; Suporte</button>
       </div>
     </div>
   </aside>
@@ -152,6 +153,26 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
       <div class="profile-actions"><button type="button" class="dark-btn" id="profile-logout">Sair da conta</button></div>
     </section>
 
+
+    <section class="page-section" id="section-support" aria-label="Central de suporte">
+      <div class="inner-head"><span>ATENDIMENTO</span><h1>Central de Suporte</h1><p>Abra um atendimento e acompanhe as respostas da equipe.</p></div>
+      <div id="support-public-alert" class="support-public-alert hidden" role="status"></div>
+      <article class="support-public-card">
+        <div class="support-public-head"><div><h2>Novo atendimento</h2><p>Escolha o assunto e descreva o que aconteceu.</p></div><button type="button" id="support-new-toggle" class="gold-btn small">NOVO TICKET</button></div>
+        <form id="support-new-form" class="support-public-form hidden">
+          <label>Categoria<select name="category" required><option value="deposit">Depósito</option><option value="withdrawal">Saque</option><option value="bonus">Bônus</option><option value="account">Conta</option><option value="games">Jogos</option><option value="other">Outros</option></select></label>
+          <label>Assunto<input name="subject" maxlength="160" required placeholder="Ex.: Depósito ainda não apareceu"></label>
+          <label class="support-full">Mensagem<textarea name="message" rows="5" maxlength="3000" required placeholder="Explique sua dúvida com o máximo de detalhes possível"></textarea></label>
+          <label class="support-full">Imagem opcional<input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label>
+          <button type="submit" class="gold-btn">ABRIR ATENDIMENTO</button>
+        </form>
+      </article>
+      <div class="support-public-layout">
+        <section class="support-public-card"><h2>Meus atendimentos</h2><div id="support-ticket-list" class="support-ticket-list"><p class="empty-state">Entre na conta para consultar seus tickets.</p></div></section>
+        <section id="support-ticket-detail" class="support-public-card hidden"><div class="support-public-head"><div><h2 id="support-ticket-title">Atendimento</h2><p id="support-ticket-meta"></p></div><button type="button" id="support-ticket-close" class="dark-btn">Fechar</button></div><div id="support-ticket-messages" class="support-public-messages"></div><form id="support-reply-form" class="support-public-form"><input type="hidden" name="ticket_id"><label class="support-full">Responder<textarea name="message" rows="4" maxlength="3000" required placeholder="Digite sua mensagem"></textarea></label><label class="support-full">Imagem opcional<input name="image" type="file" accept="image/png,image/jpeg,image/webp"></label><button type="submit" class="gold-btn">ENVIAR RESPOSTA</button></form></section>
+      </div>
+    </section>
+
     <section class="page-section" id="section-invite" aria-label="Convide amigos">
       <div class="inner-head"><span>COMPARTILHE</span><h1>Convidar</h1><p>Um atalho para divulgar a plataforma e convidar novos jogadores.</p></div>
       <article class="profile-panel invite-panel">
@@ -221,8 +242,8 @@ function h(string $value): string { return htmlspecialchars($value, ENT_QUOTES, 
 <div class="toast-stack" id="toast-stack"></div>
 <script>window.IGAMING = <?= json_encode(['basePath'=>$basePath,'appName'=>$siteName], JSON_UNESCAPED_SLASHES|JSON_UNESCAPED_UNICODE) ?>;</script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-6"></script>
-<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-6" defer></script>
+<script src="<?= h($basePath) ?>/assets/app.js?v=20260923-v24-7"></script>
+<script src="<?= h($basePath) ?>/assets/promotions.js?v=20260923-v24-7" defer></script>
 <script src="<?= h($basePath) ?>/assets/sidebar.js?v=20260923-v24-1" defer></script>
 </body>
 </html>
